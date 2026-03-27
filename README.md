@@ -1,1 +1,3 @@
-# How_much_is_enough_for_genomic_surveillance_of_BSIs
+# How much is enough for genomic surveillance of Escherichia and Klebsiella BSIs in England?
+
+This repository contains code to estiamte the same size of bloostream infection-associated E. coli and Klebsiella isolates required for genomic sequencing to achieve a specified sampling coverage using Bayesian bootstrapping combined with power calculation. These analyses use data from the NEKSUS (National E. coli and Klebsiella bloodstream infection and CPE UK Surveillance) Study. Data for this study are underembargo until April 2027. The results of this analysis are presented as a poster at ESCMID 2026. 
