@@ -48,7 +48,9 @@ p∼Dirichlet(α+n)
 Sampling from the Dirichlet distribution was implemented via its gamma representation:
 
 𝑔<sub>𝑘</sub>∼Gamma(𝑛<sub>𝑘</sub>+𝛼<sub>𝑘</sub>,1), 
-$p_k = \frac{g_k}{\sum_{j=1}^{K+1} g_j}$
+$$
+p_k = \frac{g_k}{\sum_{j=1}^{K+1} g_j}
+$$
 
 with an additional gamma draw for the novel category:
 
