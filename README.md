@@ -126,12 +126,12 @@ As in the isolate-level model, both shared and region-specific formulations of $
 
 
 ### 5) Power calculation 
-A power calculaiton<sup>Wohl et al., 2023)</sup> was applied to posterior frequency estimates to determine the minimum sample size required to detect a feature at or above a given prevalence threshold. The required sample size $n$ is given by:
+A power calculaiton<sup>Wohl et al., 2023</sup> was applied to posterior frequency estimates to determine the minimum sample size required to detect a feature at or above a given prevalence threshold. The required sample size $n$ is given by:
 
-$n = \frac{log(1-p)}{log(1-{P_Vi})}$
+$n = \frac{log(1-p)}{log(1-{P_V_{i}})}$
 
 where:
-- $P_{Vi}$ is the feature prevalence of interest, and
+- $P_{V_{i}}$ is the feature prevalence of interest, and
 - $p$ is the desired probability of detection.
 
 This links posterior prevalence estimates to sampling effort, enabling estimation of sample coverage (i.e. the proporiton of the population with features observed at least once in the sample). 
@@ -140,7 +140,7 @@ This links posterior prevalence estimates to sampling effort, enabling estimatio
 ## Statistical analyses and implementation
 All analyses were conducted in R (v4.5.2). Bayesian bootstrapping for overall models was implemented using custom functions with Dirichlet sampling via gamma representations. Hierarchical models were fitted in Stan<sup>ref</sup> using the No-U-Turn Sampler (NUTS).
 
-For overall models, posterior summaries (means/ medians and 95% credible intervals [CIs]) were based on 1,000 bootstrap draws. For hierarchical models, four Markov chains were run with 1,000 warm-up and 1,000 sampling iterations per chain. Convergence was assessed using standard diagnostics (e.g. $𝑅^hat$, effective sample size).
+For overall models, posterior summaries (means/ medians and 95% credible intervals [CIs]) were based on 1,000 bootstrap draws. For hierarchical models, four Markov chains were run with 1,000 warm-up and 1,000 sampling iterations per chain. Convergence was assessed using standard diagnostics (e.g. $\hat{R}$, effective sample size).
 
 Uninformative priors were used throughout, including explicit modelling of a “novel” feature category to account for unobserved diversity.
 
