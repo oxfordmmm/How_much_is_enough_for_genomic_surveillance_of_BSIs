@@ -36,7 +36,7 @@ Four modelling frameworks were implemented:
 4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)
 
 ### 1) Overall isolate-level features (MLSTs, fastBAPS clusters)
-For isolate-level features, where each sampling unit (isolate) contributes exactly one categorical feature, posterior frequency vectors, p, were modelled using a dirichlet distribution:
+For isolate-level features, where each sampling unit (isolate) contributes exactly one categorical feature, posterior frequency vectors, p, were modelled using a Dirichlet distribution:
 
 $p \sim \mathrm{Dirichlet}(\alpha + n)$
 
@@ -59,13 +59,15 @@ This construction ensures proper normalisation and naturally incorporates uncert
 ### 2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)
 For sub-isolate-level features, where each isolate may carry multiple features, posterior frequencies were estimated using a weighted Bayesian bootstrap.
 
-Let $Z_{ig} \in {0,1}$ (or counts) denote the presence of feature $g$ in isolate $i$, for $i=1, \dots, N$. A vector of isolate weights was drawn from a dirichlet distribution:
+Let $Z_{ig} \in {0,1}$ (or counts) denote the presence of feature $g$ in isolate $i$, for $i=1, \dots, N$. A vector of isolate weights was drawn from a Dirichlet distribution:
 
-$w \sim \mathrm{Dirichlet}(\alpha, \dots, \alpha)$
+    $w \sim \mathrm{Dirichlet}(\alpha, \dots, \alpha)$
 
 with $\alpha = 1$ (uninformative prior). In practice, this was implemented using the sum of its normalised gamma representation:
 
- $w_i = \frac{g_i}{\sum_{j=1}^N g_j}$ and $g_i \sim \mathrm{Gamma}(\alpha, \lambda)$
+    $w_i = \frac{g_i}{\sum_{j=1}^N g_j}$ and $g_i \sim \mathrm{Gamma}(\alpha, \lambda)$
+
+with $\lambda$ a constant rate parameter (the choice of $\lambda$ does not affect the normalised weights).
 
 Feature-level posterior frequencies were computed as:
 
@@ -76,17 +78,17 @@ This formulation naturally accounts for multiple features per isolate and propag
 ### 3) Regional isolate-level features (MLSTs, fastBAPS clusters)
 Region-specific frequencies for isolate-level features were modelled using a hierarchical Dirichlet-multinomial framework:
 
-$y_r \sim \mathrm{Dirichlet-Mutlinomial}(n_r, \tau_r \pie)$
+$y_r \sim \mathrm{Dirichlet-Mutlinomial}(n_r, \tau_r \pi)$
 
 where:
 - $y_r$ are counts for region $r$,
 - $n_r$ is the total number of isolates in region $r$,
-- $\pie$ represents global feature frequencies, and
+- $\pi$ represents global feature frequencies, and
 - $\tau_r$ is a concentration (shrinkage) parameter controlling similarity to the global distribution.
 
 The global frequencies were assigned a Dirichlet prior:
 
-$\pie \sim \mathrm{Dirichlet}(\alpha), \alpha_k = 1$
+$\pi \sim \mathrm{Dirichlet}(\alpha), \alpha_k = 1$
 
 Two alternative formulations were considered for $\tau$:
 (i) Shared shrinkage parameter:
@@ -104,17 +106,17 @@ The lognormal parameterisation was chosen to stabilise inference and avoid extre
 ### 4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)
 Region-specific frequencies for sub-isolate-level features were modelled using a hierarchical Beta-Binomial framework:
 
-$y_r,k \sim \mathrm{Beta-Binomial}(n_r, \tau_r \pie_k, \tau_r (1 - \pie_k))$
+$y_r,k \sim \mathrm{Beta-Binomial}(n_r, \tau_r \pi_k, \tau_r (1 - \pi_k))$
 
 where:
 - $y_r,k$ is the count of isolates in region $r$ carrying feature $k$,
 - $n_r$ is the number of isolates in region $r$,
-- $\pie_k$ is the global prevalence of feature $k$, and
+- $\pi_k$ is the global prevalence of feature $k$, and
 - $\tau_r$ controls shrinkage toward the global mean.
 
 Feature-specific global prevalences were assigned Beta priors:
 
-$\pie_k \sim \mathrm{Beta}(\alpha_k, \beta_k)$
+$\pi_k \sim \mathrm{Beta}(\alpha_k, \beta_k)$
 
 with $\alpha_k = \beta_k = 1$ for uninformative priors.
 
