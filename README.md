@@ -88,19 +88,21 @@ where:
 
 The global frequencies were assigned a Dirichlet prior:
 
-$\pi \sim \mathrm{Dirichlet}(\alpha), \alpha_k = 1$
+$\pi \sim \mathrm{Dirichlet}(\alpha),   \alpha_k = 1$
 
 Two alternative formulations were considered for $\tau$:
+
 (i) Shared shrinkage parameter:
 
 $\tau \sim \mathrm{Exponential}(1)$
 
 (ii) Region-specific shrinkage parameters:
 
-$\tau_r \sim \mathrm{Lognormal}(\mu_log\tau, \sigma_log\tau)$
-$\mu_log\tau \sim \mathrm{Normal}(log(20), 0.25),  \sigma_log\tau \sim \mathrm{Exponential}(2)$
+$\tau_r \sim \mathrm{Lognormal}(\mu_{\log\tau}, \sigma_{\log\tau})$
 
-The lognormal parameterisation was chosen to stabilise inference and avoid extreme values of $\tau_r$. Model comparison using k-fold cross-validation indicated that the region-specific shrinkage model provided superior fit across all feature types and was therefore used in downstream analyses.
+$\mu_{\log\tau} \sim \mathrm{N}(\log(20), 0.25)$ and $\sigma_{\log\tau} \sim \mathrm{Exponential}(2)$
+
+The lognormal parameterisation was chosen to stabilise inference and avoid extreme values of $\tau_r$. Model comparison using $k$-fold cross-validation indicated that the region-specific shrinkage model provided superior fit across all feature types and was therefore used in downstream analyses.
 
 
 ### 4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)
