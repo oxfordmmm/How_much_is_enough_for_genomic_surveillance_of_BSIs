@@ -26,14 +26,193 @@ Plasmids were reconstructed and annotated using MOB-suite<sup>23</sup> v3.1.9 (`
 AMR genes were annotated using AMRFinderPlus<sup>25</sup> v4.2.27, using the ```Echerichia``` or ```Klebsiella``` ```--species``` flag based on the species assigned by Kraken2<sup>26</sup> v2.1.3.
 
 ## Bayesian Bootstrapping
-Bayesian bootstrapping<sup>27</sup> was used to estimate the posterior frequency distributions of genetic features (MLSTs, fastBAPS clusters, plasmid subcommunities, and AMR genes), allowing for novel (unseen) features. Posterior frequency distributions were summarised using means/ medians and 95% credible intervals (CIs). Four separate modelling frameworks were used: 
+Bayesian bootstrapping<sup>27</sup> was used to estimate posterior frequency distributions of genetic features (MLSTs, fastBAPS clusters, plasmid subcommunities, and AMR genes), allowing for previously unobserved ('novel') categories. Posterior frequency distributions were summarised using means (or medians) and 95% credible intervals (CIs). 
+
+Four modelling frameworks were implemented: 
+
 **1) Overall isolate-level features (MLSTs, fastBAPS clusters)** 
 **2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)** 
 **3) Regional isolate-level features (MLSTs, fastBAPS clusters)** 
 **4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)** 
 
 ### 1) Overall isolate-level features (MLSTs, fastBAPS clusters)
-To estimate the posterior frequency distributions of isolate-level features (where each sampling unit, i.e. isolate corresponds to one feature) such as MLSTs or fastBAPS clusters, posterior draws for the frequency of each category were made from a Dirichlet distribution:
+For isolate-level features, where each sampling unit (isolate) contributes exactly one categorical feature, posterior frequency vectors, p, were modelled using a dirichlet distribution:
+
+𝑝
+∼
+D
+i
+r
+i
+c
+h
+l
+e
+t
+(
+𝛼
++
+𝑛
+)
+p∼Dirichlet(α+n)
+
+where:
+
+𝑝
+=
+(
+𝑝
+1
+,
+…
+,
+𝑝
+𝐾
+,
+𝑝
+novel
+)
+p=(p
+1
+	​
+
+,…,p
+K
+	​
+
+,p
+novel
+	​
+
+) is the vector of feature frequencies, including an additional category for unseen features,
+𝑛
+=
+(
+𝑛
+1
+,
+…
+,
+𝑛
+𝐾
+)
+n=(n
+1
+	​
+
+,…,n
+K
+	​
+
+) are observed counts,
+𝛼
+=
+(
+1
+,
+…
+,
+1
+)
+α=(1,…,1) represents an uninformative (uniform) prior, and
+𝐾
+K is the number of observed categories.
+
+Sampling from the Dirichlet distribution was implemented via its gamma representation:
+
+𝑔
+𝑘
+∼
+G
+a
+m
+m
+a
+(
+𝑛
+𝑘
++
+𝛼
+𝑘
+,
+1
+)
+,
+𝑝
+𝑘
+=
+𝑔
+𝑘
+∑
+𝑗
+=
+1
+𝐾
++
+1
+𝑔
+𝑗
+g
+k
+	​
+
+∼Gamma(n
+k
+	​
+
++α
+k
+	​
+
+,1),p
+k
+	​
+
+=
+∑
+j=1
+K+1
+	​
+
+g
+j
+	​
+
+g
+k
+	​
+
+	​
+
+
+with an additional gamma draw for the novel category:
+
+𝑔
+novel
+∼
+G
+a
+m
+m
+a
+(
+𝛼
+novel
+,
+1
+)
+g
+novel
+	​
+
+∼Gamma(α
+novel
+	​
+
+,1)
+
+This construction ensures proper normalisation and naturally incorporates uncertainty for unobserved categories.
+
 
 post_freq ~ Dirich(alpha + prior)
 
