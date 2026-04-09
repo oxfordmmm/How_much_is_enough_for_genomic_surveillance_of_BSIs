@@ -61,11 +61,11 @@ For sub-isolate-level features, where each isolate may carry multiple features, 
 
 Let $Z_{ig} \in {0,1}$ (or counts) denote the presence of feature $g$ in isolate $i$, for $i=1, \dots, N$. A vector of isolate weights was drawn from a Dirichlet distribution:
 
-    $w \sim \mathrm{Dirichlet}(\alpha, \dots, \alpha)$
+$w \sim \mathrm{Dirichlet}(\underbrace{\alpha, \dots, \alpha}_{N})$
 
 with $\alpha = 1$ (uninformative prior). In practice, this was implemented using the sum of its normalised gamma representation:
 
-    $w_i = \frac{g_i}{\sum_{j=1}^N g_j}$ and $g_i \sim \mathrm{Gamma}(\alpha, \lambda)$
+$w_i = \frac{g_i}{\sum_{j=1}^N g_j}$ and $g_i \sim \mathrm{Gamma}(\alpha, \lambda)$
 
 with $\lambda$ a constant rate parameter (the choice of $\lambda$ does not affect the normalised weights).
 
