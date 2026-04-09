@@ -102,16 +102,16 @@ $\tau_r \sim \mathrm{Lognormal}(\mu_{\log\tau}, \sigma_{\log\tau})$
 
 $\mu_{\log\tau} \sim \mathrm{N}(\log(20), 0.25)$ and $\sigma_{\log\tau} \sim \mathrm{Exponential}(2)$
 
-The lognormal parameterisation was chosen to stabilise inference and avoid extreme values of $\tau_r$. Model comparison using $k$-fold cross-validation indicated that the region-specific shrinkage model provided superior fit across all feature types and was therefore used in downstream analyses.
+The lognormal parameterisation was chosen to stabilise inference and avoid extreme values of $\tau_r$. Model comparison using $K$-fold cross-validation indicated that the region-specific shrinkage model provided superior fit across all feature types and was therefore used in downstream analyses.
 
 
 ### 4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)
 Region-specific frequencies for sub-isolate-level features were modelled using a hierarchical Beta-Binomial framework:
 
-$y_r,k \sim \mathrm{Beta-Binomial}(n_r, \tau_r \pi_k, \tau_r (1 - \pi_k))$
+$y_{r,k} \sim \mathrm{Beta-Binomial}(n_r, \tau_r \pi_k, \tau_r (1 - \pi_k))$
 
 where:
-- $y_r,k$ is the count of isolates in region $r$ carrying feature $k$,
+- $y_{r,k}$ is the count of isolates in region $r$ carrying feature $k$,
 - $n_r$ is the number of isolates in region $r$,
 - $\pi_k$ is the global prevalence of feature $k$, and
 - $\tau_r$ controls shrinkage toward the global mean.
@@ -128,10 +128,10 @@ As in the isolate-level model, both shared and region-specific formulations of $
 ### 5) Power calculation 
 A power calculaiton<sup>Wohl et al., 2023)</sup> was applied to posterior frequency estimates to determine the minimum sample size required to detect a feature at or above a given prevalence threshold. The required sample size $n$ is given by:
 
-$n = \frac{log(1-p)}{log(1-P_V_i)}$
+$n = \frac{log(1-p)}{log(1-{P_Vi})}$
 
 where:
-- $P_V_i$ is the feature prevalence of interest, and
+- $P_{Vi}$ is the feature prevalence of interest, and
 - $p$ is the desired probability of detection.
 
 This links posterior prevalence estimates to sampling effort, enabling estimation of sample coverage (i.e. the proporiton of the population with features observed at least once in the sample). 
