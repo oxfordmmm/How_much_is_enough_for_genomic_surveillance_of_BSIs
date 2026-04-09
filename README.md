@@ -38,187 +38,22 @@ Four modelling frameworks were implemented:
 ### 1) Overall isolate-level features (MLSTs, fastBAPS clusters)
 For isolate-level features, where each sampling unit (isolate) contributes exactly one categorical feature, posterior frequency vectors, p, were modelled using a dirichlet distribution:
 
-𝑝
-∼
-D
-i
-r
-i
-c
-h
-l
-e
-t
-(
-𝛼
-+
-𝑛
-)
 p∼Dirichlet(α+n)
 
-where:
-
-𝑝
-=
-(
-𝑝
-1
-,
-…
-,
-𝑝
-𝐾
-,
-𝑝
-novel
-)
-p=(p
-1
-	​
-
-,…,p
-K
-	​
-
-,p
-novel
-	​
-
-) is the vector of feature frequencies, including an additional category for unseen features,
-𝑛
-=
-(
-𝑛
-1
-,
-…
-,
-𝑛
-𝐾
-)
-n=(n
-1
-	​
-
-,…,n
-K
-	​
-
-) are observed counts,
-𝛼
-=
-(
-1
-,
-…
-,
-1
-)
-α=(1,…,1) represents an uninformative (uniform) prior, and
-𝐾
-K is the number of observed categories.
+- where: 𝑝=(𝑝<sub>1</sub>,…,𝑝<sub>𝐾</sub>,𝑝<sub>novel</sub>) is the vector of feature frequencies, including an additional category for unseen features,
+- 𝑛=(𝑛<sub>1</sub>,…,𝑛<sub>𝐾</sub>) are observed counts,
+- α=(1,…,1) represents an uninformative (uniform) prior, and
+- 𝐾 is the number of observed categories.
 
 Sampling from the Dirichlet distribution was implemented via its gamma representation:
 
-𝑔
-𝑘
-∼
-G
-a
-m
-m
-a
-(
-𝑛
-𝑘
-+
-𝛼
-𝑘
-,
-1
-)
-,
-𝑝
-𝑘
-=
-𝑔
-𝑘
-∑
-𝑗
-=
-1
-𝐾
-+
-1
-𝑔
-𝑗
-g
-k
-	​
-
-∼Gamma(n
-k
-	​
-
-+α
-k
-	​
-
-,1),p
-k
-	​
-
-=
-∑
-j=1
-K+1
-	​
-
-g
-j
-	​
-
-g
-k
-	​
-
-	​
-
+𝑔<sub>𝑘</sub>∼Gamma(𝑛<sub>𝑘</sub>+𝛼<sub>𝑘</sub>,1), 𝑝<sub>𝑘</sub>=𝑔<sub>𝑘</sub>/(∑<sup>𝑗=1</sup><sup>𝐾+1</suo>𝑔𝑗)
 
 with an additional gamma draw for the novel category:
 
-𝑔
-novel
-∼
-G
-a
-m
-m
-a
-(
-𝛼
-novel
-,
-1
-)
-g
-novel
-	​
-
-∼Gamma(α
-novel
-	​
-
-,1)
+𝑔<sub>novel</sub>∼Gamma(𝛼<sub>novel</sub>,1)
 
 This construction ensures proper normalisation and naturally incorporates uncertainty for unobserved categories.
-
-
-post_freq ~ Dirich(alpha + prior)
-
-where alpha is the shape parameter of the dirichlet distribution, and represents a vector of length (k, the number of features + 1 novel unseen feature), and the prior represents an uninformative uniform prior (a vector 1,1,1,....,1 of length (k + 1)). This was implemented by summing the posterior draws from separate gamma distributions, one for eack feature, k, as this has been shown to be equivalent to the dirichlet distribution<sup>ref</sup>.
-
-post_freq_k ~ gamma(alpha_k + prior_k, rate = 1)
 
 
 ### 2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)
