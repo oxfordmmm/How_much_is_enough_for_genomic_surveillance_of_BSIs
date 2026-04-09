@@ -40,7 +40,10 @@ For isolate-level features, where each sampling unit (isolate) contributes exact
 
 $p \sim \mathrm{Dirichlet}(\alpha + n)$
 
-where $p = (p_1, \dots, p_K, p_{\text{novel}})$ is the vector of feature frequencies including a category for unseen features, $n = (n_1, \dots, n_K)$ are observed counts, and $\alpha = (1, \dots, 1)$ is an uninformative prior.
+- where $p = (p_1, \dots, p_K, p_{\text{novel}})$ is the vector of feature frequencies including a category for unseen features,
+- $n = (n_1, \dots, n_K)$ are observed counts,
+- and $\alpha = (1, \dots, 1)$ is an uninformative prior, and
+- $K$ is the number of observed categories.
 
 Sampling from the Dirichlet distribution was implemented via its gamma representation:
 
@@ -56,76 +59,86 @@ This construction ensures proper normalisation and naturally incorporates uncert
 ### 2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)
 For sub-isolate-level features, where each isolate may carry multiple features, posterior frequencies were estimated using a weighted Bayesian bootstrap.
 
-Let $Z_{ig} \in {0,1}$ (or counts) denote the presence of feature $g$ in isolate $i$. A vector of weights was drawn as:
+Let $Z_{ig} \in {0,1}$ (or counts) denote the presence of feature $g$ in isolate $i$, for $i=1, \dots, N$. A vector of isolate weights was drawn from a dirichlet distribution:
 
 $w \sim \mathrm{Dirichlet}(\alpha, \dots, \alpha)$
 
-with $\alpha = 1$.
+with $\alpha = 1$ (uninformative prior). In practice, this was implemented using the sum of its normalised gamma representation:
 
-In practice, this was implemented via:
-
-$g_i \sim \mathrm{Gamma}(\alpha, \lambda)$ and $w_i = \frac{g_i}{\sum_{j=1}^N g_j}$
+ $w_i = \frac{g_i}{\sum_{j=1}^N g_j}$ and $g_i \sim \mathrm{Gamma}(\alpha, \lambda)$
 
 Feature-level posterior frequencies were computed as:
 
 $p_g = \sum_{i=1}^{N} w_i Z_{ig}$
 
+This formulation naturally accounts for multiple features per isolate and propagates uncertainty through the weight distribution.
+
 ### 3) Regional isolate-level features (MLSTs, fastBAPS clusters)
-Region-specific posterior frequency distribution estimates for isolate-level features such as MLSTs, and fastBAPS clusters were obtained from a hierarchical dirichlet-multinomial bayesian model. In this hierarchical model, the regional counts for each feature/ category were drawn from a dirichlet distribution, whose parameters (1 parameter per category plus a novel unseen category) were obtained by multiplying the global feature frequencies for each feature category, pi, by a shrinkage parameter, tau:
+Region-specific frequencies for isolate-level features were modelled using a hierarchical Dirichlet-multinomial framework:
 
-y_r ~ dirichlet(tau_r * pi)
+$y_r \sim \mathrm{Dirichlet-Mutlinomial}(n_r, \tau_r \pie)$
 
-The hierarchical nature of the model comes from the fact that both the pi and the tau parameters were themsleves sampled from further prior distributions:
+where:
+- $y_r$ are counts for region $r$,
+- $n_r$ is the total number of isolates in region $r$,
+- $\pie$ represents global feature frequencies, and
+- $\tau_r$ is a concentration (shrinkage) parameter controlling similarity to the global distribution.
 
-pi ~ dirichlet(alpha)
+The global frequencies were assigned a Dirichlet prior:
 
-where the vector of the global feature prevalences, pi, follows an uninformative multinomial prior with all parameters set to alpha (alpha = 1 in an uninformative prior), and
+$\pie \sim \mathrm{Dirichlet}(\alpha), \alpha_k = 1$
 
-tau ~ exponential(1)
+Two alternative formulations were considered for $\tau$:
+(i) Shared shrinkage parameter:
 
-where the shrinkage parameter, tau, representing how close each regional count is to the global counts, is sampled from an exponential disitrbution.
+$\tau \sim \mathrm{Exponential}(1)$
 
-In an alternative version of this model, a region specific shrinkage parameter, tau_r, was used, where, instead of the shrinkage, tau, being drawn from the same disitrubtion for each region, tau was drawn from a different lognormal distribution for each region, where this disitrbution was parameterised by drawing from two further separate prior distributions:
+(ii) Region-specific shrinkage parameters:
 
-tau_r ~ lognormal(mu_log_tau, sigma_log_tau)
-and mu_log_tau ~ normal(log(20), 0.25) and sigma_long_tau ~ exponential(2).
+$\tau_r \sim \mathrm{Lognormal}(\mu_log\tau, \sigma_log\tau)$
+$\mu_log\tau \sim \mathrm{Normal}(log(20), 0.25),  \sigma_log\tau \sim \mathrm{Exponential}(2)$
 
-This lognormal model construct for tau_r was selected for model stability to avoid extreme low or high values. The shared and region-specific tau models signified regional frequencies differing from 'global' frequencies by similar and differing magnitudes, respectively. K-fold cross validation<sup>ref</sup> was used to compare both model versions. The region-specific tau model, signifying that the frequencies of each region differ from the global frequencies by differing magnitudes, produced a better fit for all genetic features, and was therefore selected for subsequent analyses.
+The lognormal parameterisation was chosen to stabilise inference and avoid extreme values of $\tau_r$. Model comparison using k-fold cross-validation indicated that the region-specific shrinkage model provided superior fit across all feature types and was therefore used in downstream analyses.
+
 
 ### 4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)
-Region-specific posterior frequency distribution estimates for sub-isolate-level features such as plasmid-subcommunities and AMR genes were obtained from a hierarchical Beta-Binomial Bayesian model. In this hierarchical model, the regional counts for each feature (plasmid/AMR gene) were drawn from a beta-binomial distribution, that was parameterised by the number of isolates in that region with data, n_r, the global frequency for each k feature, pi_k, multiplied by the shrinkage parameter, tau, and its reflection (tau * (1-pi_k)):
+Region-specific frequencies for sub-isolate-level features were modelled using a hierarchical Beta-Binomial framework:
 
-y_r,k ~ beta_binomial(n_r, tau * pi_k, tau*(1-pi_k))
+$y_r,k \sim \mathrm{Beta-Binomial}(n_r, \tau_r \pie_k, \tau_r (1 - \pie_k))$
 
-True to the hierarchical nature of the model the pi and tau parameters were again, obtained by sampling from further disitrbutions (a separate one for each feature, k):
+where:
+- $y_r,k$ is the count of isolates in region $r$ carrying feature $k$,
+- $n_r$ is the number of isolates in region $r$,
+- $\pie_k$ is the global prevalence of feature $k$, and
+- $\tau_r$ controls shrinkage toward the global mean.
 
-pi_k ~ beta(alpha_prior_k, beta_prior_k)
+Feature-specific global prevalences were assigned Beta priors:
 
-and 
+$\pie_k \sim \mathrm{Beta}(\alpha_k, \beta_k)$
 
-tau ~ exponential(1) for the shared-regional tau model, or
+with $\alpha_k = \beta_k = 1$ for uninformative priors.
 
-tau_r ~ lognormal(mu_log_tau, sigma_log_tau)
-and mu_log_tau ~ normal(log(20), 0.25) and sigma_long_tau ~ exponential(2)
+As in the isolate-level model, both shared and region-specific formulations of $\tau$ were evaluated, with the region-specific lognormal model selected based on cross-validation performance.
 
-for the region-specific tau model.
-
-k-fold cross validation once again showed that the region-specific tau model produced a better fit for all genetic features, and was therefore used in subsequent anlayses.
-
-
-All regional models were coded and fitted using STAN, which implements an efficient no U-turn sampler (NUTS). For overall  models, posterior estimates were obtained from 1000 draws. For hierarchical models, sampling for the posterior was run in 4 parallel chains with 1000 warm-up iterations, and 1000 sampling iterations. Posterior estimates were summarised using means/medians and 95% credible intervals (CIs), and uninformative uniform priors were applied to feature counts, including for a 'novel' feature category, representing features that were unobserved in the NEKSUS dataset, but may be present in the population.
 
 ### 5) Power calculation 
-A power calculaiton<sup>Wohl et al., 2023)</sup> was applied to posterior Bayesian frequency distributions estimates, using this equation:
+A power calculaiton<sup>Wohl et al., 2023)</sup> was applied to posterior frequency estimates to determine the minimum sample size required to detect a feature at or above a given prevalence threshold. The required sample size $n$ is given by:
 
-n = log(1-p)/log(1-Pvi)
+$n = \frac{log(1-p)}{log(1-P_V_i)}$
 
-where n is the minimum sample size required to detect a feature of fequency >= Pvi, at a certainty p. The two concepts were linked using the frequency dimension - i.e. Bayesian bootstrapping helped estimate, with uncertainty, the proprtion of the population that had a feature occuring at a frequency of >= f, and the power calculation determines the minimum sample size needed to detect a feature of frequency >= f, and therefore at that sample size, the sample coverage, i.e. the proporton of the population with a feature that has already been observed in your sample, can be obtained from the Bayesian bootstrapping posterior estimates.
+where:
+- $P_V_i$ is the feature prevalence of interest, and
+- $p$ is the desired probability of detection.
+
+This links posterior prevalence estimates to sampling effort, enabling estimation of sample coverage (i.e. the proporiton of the population with features observed at least once in the sample). 
 
 
+## Statistical analyses and implementation
+All analyses were conducted in R (v4.5.2). Bayesian bootstrapping for overall models was implemented using custom functions with Dirichlet sampling via gamma representations. Hierarchical models were fitted in Stan<sup>ref</sup> using the No-U-Turn Sampler (NUTS).
 
-## Statistical analyses and visualisation
-Statistical analyses and visulaisations were conducted in R<sup>ref</sup> v4.5.2.
+For overall models, posterior summaries (means/ medians and 95% credible intervals [CIs]) were based on 1,000 bootstrap draws. For hierarchical models, four Markov chains were run with 1,000 warm-up and 1,000 sampling iterations per chain. Convergence was assessed using standard diagnostics (e.g. $𝑅^hat$, effective sample size).
+
+Uninformative priors were used throughout, including explicit modelling of a “novel” feature category to account for unobserved diversity.
 
 # References
 1. Oxford Nanopore Technologies. Dorado v0.9 2024 [Available from: https://github.com/nanoporetech/dorado?tab=readme-ov-file#alignment].
