@@ -27,32 +27,84 @@ AMR genes were annotated using AMRFinderPlus<sup>25</sup> v4.2.27, using the ```
 
 ## Bayesian Bootstrapping
 Bayesian bootstrapping<sup>27</sup> was used to estimate the posterior frequency distributions of genetic features (MLSTs, fastBAPS clusters, plasmid subcommunities, and AMR genes), allowing for novel (unseen) features. Posterior frequency distributions were summarised using means/ medians and 95% credible intervals (CIs). Four separate modelling frameworks were used: 
-**1) Overall isolate-level features (MLSTs, fastBAPS clusters)** - with frequency of each category sampled from a Dirichlet model, where the the parameters were obtained by combining the observed frequencies (plus an additional 'novel' category) in the NEKSUS data, combined with an uninformative uniform prior.
-**2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)** - with the presence/absence of each plasmid subcommunity/gene per isolate sampled from a binomial distribution, where this was parameterised using the oberved plasmid/gene frequencies (plus an additional 'novel' category) combined with an uninformative uniform priors.
-**3) Regional isolate-level features (MLSTs, fastBAPS clusters)** - hierarchical Dirichlet-Multinomial Bayesian model, where regional frequencies of each category were sampled from a dirichlet-multinomial model, which itself was parameteirsed by sampling from another distrbution, namely to derive a tau (shrinkage) parameter which controls
-**4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)** - with the presence/absence of each plasmid subcommunity/gene sampled from a binomial distribution, with a beta conjugate prrior.
+**1) Overall isolate-level features (MLSTs, fastBAPS clusters)** 
+**2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)** 
+**3) Regional isolate-level features (MLSTs, fastBAPS clusters)** 
+**4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)** 
 
 ### 1) Overall isolate-level features (MLSTs, fastBAPS clusters)
-To estimate the posterior frequency distributions of 
+To estimate the posterior frequency distributions of isolate-level features (where each sampling unit, i.e. isolate corresponds to one feature) such as MLSTs or fastBAPS clusters, posterior draws for the frequency of each category were made from a Dirichlet distribution:
+
+post_freq ~ Dirich(alpha + prior)
+
+where alpha is the shape parameter of the dirichlet distribution, and represents a vector of length (k, the number of features + 1 novel unseen feature), and the prior represents an uninformative uniform prior (a vector 1,1,1,....,1 of length (k + 1)). This was implemented by summing the posterior draws from separate gamma distributions, one for eack feature, k, as this has been shown to be equivalent to the dirichlet distribution<sup>ref</sup>.
+
+post_freq_k ~ gamma(alpha_k + prior_k, rate = 1)
+
 
 ### 2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)
+To estimate the posterior frequency distribution of sub-isolate-level features (where each sampling unit, i.e. isolate, can carry zero, one or many features) such as plasmid subcommunities and AMR genes, posterior draws for the frequency of each plasmid/AMR gene were obtained by multiplying the observed plasmid/gene presence/absence matrix by a weight for each isolate, signifying the number of plasmids/gene per isolate. The weight was drawn from a dirichlet disitrbution with an alpha parameter for each isolate in the NEKSUS data, N, with shape parameter alpha, which was set to 1 as an uninformative uniform prior. 
+
+weights ~ dirichlet(alpha_(1...N))
+
+This was implemented by summing draws from N gamma distributions (1 for each isolate), with shape parameter = alpha, and rate parameter = 2.
 
 ### 3) Regional isolate-level features (MLSTs, fastBAPS clusters)
-Regional estimates were obtained using hierarhical bayesian modelling, where each region varied from the global parameters by a region-specific shrinkage rameter, tau. Region specific shrinkage was selected as this outperformed universal shrinkage for all genomic units using k-fold cross-validation[]. Dirichlet distributions with multinomial priors were used for MLSTs and fastBAPS clusters, and Binomial distributions with Beta distribution priors were used for sub-isolate-level features such as plasmids and AMR genes.
+Region-specific posterior frequency distribution estimates for isolate-level features such as MLSTs, and fastBAPS clusters were obtained from a hierarchical dirichlet-multinomial bayesian model. In this hierarchical model, the regional counts for each feature/ category were drawn from a dirichlet distribution, whose parameters (1 parameter per category plus a novel unseen category) were obtained by multiplying the global feature frequencies for each feature category, pi, by a shrinkage parameter, tau:
 
-Region-specific models were coded and fitted using STAN, using a no U-turn sampler (NUTS).
+y_r ~ dirichlet(tau_r * pi)
 
-For regional estimates, two model versions were compared for each genetic feature: with shared tau (shrinkage), and region-specific tau. The tau (srinkage) parameter controls how close regional counts are to global (aggregated national) counts. For the shared tau, the tau parameter for all regions was sampled from the same distirbution, indicating that regional frequencies differ from 'global' frequecies by a similar magnitude. For the region-specific tau models, the tau parameters for each region were samples from different distributions (same shape but different parameters, where the parameters themselves were sampled from another parent distribution), indicating that regional frequencies differ from 'global' frequencies by differing magnitudes. The models were compared using k-fold cross-valudation<sup>ref</sup>. The region-specific tau model produced a better fit to the data for all features, and was therefore selected for subsequent analyses. 
+The hierarchical nature of the model comes from the fact that both the pi and the tau parameters were themsleves sampled from further prior distributions:
+
+pi ~ dirichlet(alpha)
+
+where the vector of the global feature prevalences, pi, follows an uninformative multinomial prior with all parameters set to alpha (alpha = 1 in an uninformative prior), and
+
+tau ~ exponential(1)
+
+where the shrinkage parameter, tau, representing how close each regional count is to the global counts, is sampled from an exponential disitrbution.
+
+In an alternative version of this model, a region specific shrinkage parameter, tau_r, was used, where, instead of the shrinkage, tau, being drawn from the same disitrubtion for each region, tau was drawn from a different lognormal distribution for each region, where this disitrbution was parameterised by drawing from two further separate prior distributions:
+
+tau_r ~ lognormal(mu_log_tau, sigma_log_tau)
+and mu_log_tau ~ normal(log(20), 0.25) and sigma_long_tau ~ exponential(2).
+
+This lognormal model construct for tau_r was selected for model stability to avoid extreme low or high values. The shared and region-specific tau models signified regional frequencies differing from 'global' frequencies by similar and differing magnitudes, respectively. K-fold cross validation<sup>ref</sup> was used to compare both model versions. The region-specific tau model, signifying that the frequencies of each region differ from the global frequencies by differing magnitudes, produced a better fit for all genetic features, and was therefore selected for subsequent analyses.
 
 ### 4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)
+Region-specific posterior frequency distribution estimates for sub-isolate-level features such as plasmid-subcommunities and AMR genes were obtained from a hierarchical Beta-Binomial Bayesian model. In this hierarchical model, the regional counts for each feature (plasmid/AMR gene) were drawn from a beta-binomial distribution, that was parameterised by the number of isolates in that region with data, n_r, the global frequency for each k feature, pi_k, multiplied by the shrinkage parameter, tau, and its reflection (tau * (1-pi_k)):
+
+y_r,k ~ beta_binomial(n_r, tau * pi_k, tau*(1-pi_k))
+
+True to the hierarchical nature of the model the pi and tau parameters were again, obtained by sampling from further disitrbutions (a separate one for each feature, k):
+
+pi_k ~ beta(alpha_prior_k, beta_prior_k)
+
+and 
+
+tau ~ exponential(1) for the shared-regional tau model, or
+
+tau_r ~ lognormal(mu_log_tau, sigma_log_tau)
+and mu_log_tau ~ normal(log(20), 0.25) and sigma_long_tau ~ exponential(2)
+
+for the region-specific tau model.
+
+k-fold cross validation once again showed that the region-specific tau model produced a better fit for all genetic features, and was therefore used in subsequent anlayses.
+
+
+All regional models were coded and fitted using STAN, which implements an efficient no U-turn sampler (NUTS). For overall  models, posterior estimates were obtained from 1000 draws. For hierarchical models, sampling for the posterior was run in 4 parallel chains with 1000 warm-up iterations, and 1000 sampling iterations. Posterior estimates were summarised using means/medians and 95% credible intervals (CIs), and uninformative uniform priors were applied to feature counts, including for a 'novel' feature category, representing features that were unobserved in the NEKSUS dataset, but may be present in the population.
 
 ### 5) Power calculation 
-A power calculaiton (Wohl et al., 2023) was applied to posterior Bayesian estiamtes of frequency distributions, using equation ...m to estimate the sample size required to detect isolates with a feature at least as frequent as f, which would represent a certain sample coverage at a certain certainty level, p.
+A power calculaiton<sup>Wohl et al., 2023)</sup> was applied to posterior Bayesian frequency distributions estimates, using this equation:
+
+n = log(1-p)/log(1-Pvi)
+
+where n is the minimum sample size required to detect a feature of fequency >= Pvi, at a certainty p. The two concepts were linked using the frequency dimension - i.e. Bayesian bootstrapping helped estimate, with uncertainty, the proprtion of the population that had a feature occuring at a frequency of >= f, and the power calculation determines the minimum sample size needed to detect a feature of frequency >= f, and therefore at that sample size, the sample coverage, i.e. the proporton of the population with a feature that has already been observed in your sample, can be obtained from the Bayesian bootstrapping posterior estimates.
 
 
 
 ## Statistical analyses and visualisation
-Statistical analyses and visulaisations were conducted in R[] v4.5.2.
+Statistical analyses and visulaisations were conducted in R<sup>ref</sup> v4.5.2.
 
 # References
 1. Oxford Nanopore Technologies. Dorado v0.9 2024 [Available from: https://github.com/nanoporetech/dorado?tab=readme-ov-file#alignment].
