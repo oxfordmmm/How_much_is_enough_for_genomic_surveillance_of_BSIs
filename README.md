@@ -38,7 +38,7 @@ Four modelling frameworks were implemented:
 ### 1) Overall isolate-level features (MLSTs, fastBAPS clusters)
 For isolate-level features, where each sampling unit (isolate) contributes exactly one categorical feature, posterior frequency vectors, p, were modelled using a dirichlet distribution:
 
-p=(p<sub>1</sub>​,…,p<sub>K​</sub>,p<sub>novel</sub>​)
+p∼Dirichlet(α+n)
 
 - where: 𝑝=(𝑝<sub>1</sub>,…,𝑝<sub>𝐾</sub>,𝑝<sub>novel</sub>) is the vector of feature frequencies, including an additional category for unseen features,
 - 𝑛=(𝑛<sub>1</sub>,…,𝑛<sub>𝐾</sub>) are observed counts,
@@ -47,7 +47,11 @@ p=(p<sub>1</sub>​,…,p<sub>K​</sub>,p<sub>novel</sub>​)
 
 Sampling from the Dirichlet distribution was implemented via its gamma representation:
 
-𝑔<sub>𝑘</sub>∼Gamma(𝑛<sub>𝑘</sub>+𝛼<sub>𝑘</sub>,1), 𝑝<sub>𝑘</sub>=𝑔<sub>𝑘</sub>/(∑<sub>𝑗=1</sub><sup>𝐾+1</sup>𝑔𝑗)
+𝑔<sub>𝑘</sub>∼Gamma(𝑛<sub>𝑘</sub>+𝛼<sub>𝑘</sub>,1), 
+$$
+g_k
+p_k = \frac{g_k}{\sum_{j=1}^{K+1} g_j}
+$$
 
 with an additional gamma draw for the novel category:
 
