@@ -128,7 +128,7 @@ As in the isolate-level model, both shared and region-specific formulations of $
 ### 5) Power calculation 
 A power calculaiton<sup>Wohl et al., 2023</sup> was applied to posterior frequency estimates to determine the minimum sample size required to detect a feature at or above a given prevalence threshold. The required sample size $n$ is given by:
 
-$n = \frac{log(1-p)}{log(1-{P_V_{i}})}$
+$n = \frac{log(1-p)}{log(1-{P_{V_{i}})}$
 
 where:
 - $P_{V_{i}}$ is the feature prevalence of interest, and
