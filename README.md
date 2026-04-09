@@ -30,41 +30,45 @@ Bayesian bootstrapping<sup>27</sup> was used to estimate posterior frequency dis
 
 Four modelling frameworks were implemented: 
 
-**1) Overall isolate-level features (MLSTs, fastBAPS clusters)** 
-**2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)** 
-**3) Regional isolate-level features (MLSTs, fastBAPS clusters)** 
-**4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)** 
+1) Overall isolate-level features (MLSTs, fastBAPS clusters)
+2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes) 
+3) Regional isolate-level features (MLSTs, fastBAPS clusters)
+4) Regional sub-isolate-level features (plasmid subcommunities, AMR genes)
 
 ### 1) Overall isolate-level features (MLSTs, fastBAPS clusters)
 For isolate-level features, where each sampling unit (isolate) contributes exactly one categorical feature, posterior frequency vectors, p, were modelled using a dirichlet distribution:
 
-p∼Dirichlet(α+n)
+$p \sim \mathrm{Dirichlet}(\alpha + n)$
 
-- where: 𝑝=(𝑝<sub>1</sub>,…,𝑝<sub>𝐾</sub>,𝑝<sub>novel</sub>) is the vector of feature frequencies, including an additional category for unseen features,
-- 𝑛=(𝑛<sub>1</sub>,…,𝑛<sub>𝐾</sub>) are observed counts,
-- α=(1,…,1) represents an uninformative (uniform) prior, and
-- 𝐾 is the number of observed categories.
+where $p = (p_1, \dots, p_K, p_{\text{novel}})$ is the vector of feature frequencies including a category for unseen features, $n = (n_1, \dots, n_K)$ are observed counts, and $\alpha = (1, \dots, 1)$ is an uninformative prior.
 
 Sampling from the Dirichlet distribution was implemented via its gamma representation:
 
-𝑔<sub>𝑘</sub>∼Gamma(𝑛<sub>𝑘</sub>+𝛼<sub>𝑘</sub>,1), 
-$$
-p_k = \frac{g_k}{\sum_{j=1}^{K+1} g_j}
-$$
+$g_k \sim \mathrm{Gamma}(n_k + \alpha_k, 1)$ and $p_k = \frac{g_k}{\sum_{j=1}^{K+1} g_j}$
 
-with an additional gamma draw for the novel category:
+with an additional draw for the novel category:
 
-𝑔<sub>novel</sub>∼Gamma(𝛼<sub>novel</sub>,1)
+$g_{\text{novel}} \sim \mathrm{Gamma}(\alpha_{\text{novel}}, 1)$
 
 This construction ensures proper normalisation and naturally incorporates uncertainty for unobserved categories.
 
 
 ### 2) Overall sub-isolate-level features (plasmid subcommunities, AMR genes)
-To estimate the posterior frequency distribution of sub-isolate-level features (where each sampling unit, i.e. isolate, can carry zero, one or many features) such as plasmid subcommunities and AMR genes, posterior draws for the frequency of each plasmid/AMR gene were obtained by multiplying the observed plasmid/gene presence/absence matrix by a weight for each isolate, signifying the number of plasmids/gene per isolate. The weight was drawn from a dirichlet disitrbution with an alpha parameter for each isolate in the NEKSUS data, N, with shape parameter alpha, which was set to 1 as an uninformative uniform prior. 
+For sub-isolate-level features, where each isolate may carry multiple features, posterior frequencies were estimated using a weighted Bayesian bootstrap.
 
-weights ~ dirichlet(alpha_(1...N))
+Let $Z_{ig} \in {0,1}$ (or counts) denote the presence of feature $g$ in isolate $i$. A vector of weights was drawn as:
 
-This was implemented by summing draws from N gamma distributions (1 for each isolate), with shape parameter = alpha, and rate parameter = 2.
+$w \sim \mathrm{Dirichlet}(\alpha, \dots, \alpha)$
+
+with $\alpha = 1$.
+
+In practice, this was implemented via:
+
+$g_i \sim \mathrm{Gamma}(\alpha, \lambda)$ and $w_i = \frac{g_i}{\sum_{j=1}^N g_j}$
+
+Feature-level posterior frequencies were computed as:
+
+$p_g = \sum_{i=1}^{N} w_i Z_{ig}$
 
 ### 3) Regional isolate-level features (MLSTs, fastBAPS clusters)
 Region-specific posterior frequency distribution estimates for isolate-level features such as MLSTs, and fastBAPS clusters were obtained from a hierarchical dirichlet-multinomial bayesian model. In this hierarchical model, the regional counts for each feature/ category were drawn from a dirichlet distribution, whose parameters (1 parameter per category plus a novel unseen category) were obtained by multiplying the global feature frequencies for each feature category, pi, by a shrinkage parameter, tau:
