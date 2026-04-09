@@ -26,11 +26,25 @@ Plasmids were reconstructed and annotated using MOB-suite<sup>23</sup> v3.1.9 (`
 AMR genes were annotated using AMRFinderPlus<sup>25</sup> v4.2.27, using the ```Echerichia``` or ```Klebsiella``` ```--species``` flag based on the species assigned by Kraken2<sup>26</sup> v2.1.3.
 
 ## Bayesian Bootstrapping
-Bayesian bootstrapping<sup>27</sup> was used to estimate the posterior frequency distributions of genetic features (MLSTs, fastBAPS clusters, plasmid subcommunities, and AMR genes). with uncertainty and allowing for novel (unseen) features. Briefly, 
+Bayesian bootstrapping<sup>27</sup> was used to estimate the posterior frequency distributions of genetic features (MLSTs, fastBAPS clusters, plasmid subcommunities, and AMR genes), allowing for novel (unseen) features. Posterior frequency distributions were summarised using means/ medians and 95% credible intervals (CIs). Four separate modelling frameworks were used: 
+1) Overall Dirichlet model for isolate-level features (MLSTs, fastBAPS clusters) - with frequency of each category sampled from a Dirichlet model
+2) Overall Binomial model for sub-isolate-level features (plasmid subcommunities, AMR genes) - with the presence/absence of each plasmid subcommunity/gene per isolate sampled from a binomial distribution.
+3) Hierarchical Dirichlet-Multinomial Bayesian boostrap incorporating regional information for isolate-level features (MLSTs, fastBAPS clusters) - with frequency of each category sampled from a Dirichlet-Multinomial model
+4) Hierarchical Beta-Binomial Bayesian bootstrap with regional information for sub-isolate-level features (plasmid subcommunities, AMR genes) - with the presence/absence of each plasmid subcommunity/gene sampled from a binomial distribution, with a beta conjugate prrior.
 
+### 1) Overall isolate-level features 
+
+### 2) Overall sub-isolate-level features 
+
+### 3) Regional isolate-level features
+Regional estimates were obtained using hierarhical bayesian modelling, where each region varied from the global parameters by a region-specific shrinkage rameter, tau. Region specific shrinkage was selected as this outperformed universal shrinkage for all genomic units using k-fold cross-validation[]. Dirichlet distributions with multinomial priors were used for MLSTs and fastBAPS clusters, and Binomial distributions with Beta distribution priors were used for sub-isolate-level features such as plasmids and AMR genes.
+
+### 4) Regional sub-isolate-level features 
+
+### 5) Power calculation 
 A power calculaiton (Wohl et al., 2023) was applied to posterior Bayesian estiamtes of frequency distributions, using equation ...m to estimate the sample size required to detect isolates with a feature at least as frequent as f, which would represent a certain sample coverage at a certain certainty level, p.
 
-Regional estimates were obtained using hierarhical bayesian modelling, where each region varied from the global parameters by a region-specific shrinkage rameter, tau. Region specific shrinkage was selected as this outperformed universal shrinkage for all genomic units using k-fold cross-validation[]. Dirichlet distributions with multinomial priors were used for MLSTs and fastBAPS clusters, and Binomial distributions with Beta distribution priors were used for sub-isolate-level features such as plasmids and AMR genes.
+
 
 ## Statistical analyses and visualisation
 Statistical analyses and visulaisations were conducted in R[] v4.5.2.
