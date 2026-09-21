@@ -696,11 +696,14 @@ ui <- fluidPage(
       .status-box { padding:8px 10px; background:#f7f7f7; border:1px solid #e5e5e5; border-radius:6px; margin-bottom:10px; }\
       .error-box { padding:8px 10px; background:#fff2f2; border:1px solid #f0c0c0; border-radius:6px; margin-bottom:10px; color:#9b1c1c; }\
       .detected-box { padding:8px 10px; background:#f7fafc; border:1px solid #dce6ef; border-radius:6px; margin-top:6px; margin-bottom:10px; }\
+      .analysis-status { display:flex; align-items:center; gap:9px; padding:8px 10px; margin-bottom:10px; background:#f7f7f7; border:1px solid #e5e5e5; border-radius:6px; }\
+      .analysis-spinner { width:16px; height:16px; border:2px solid #d9d9d9; border-top-color:#337ab7; border-radius:50%; animation:spin 0.8s linear infinite; flex:0 0 auto; }\
+      @keyframes spin { to { transform:rotate(360deg); } }\
     "))
   ),
-  titlePanel("How much is enough? Genomic surveillance sampling-frame estimator"),
+  titlePanel("How much is enough? Genomic surveillance sampling-frame estimator for bacterial pathogens"),
   div(class = "app-intro",
-      "Bayesian analysis of isolate-level and sub-isolate-level genomic features, using the functions and frequency grids supplied with the manuscript analysis."),
+      "Bayesian analysis of isolate-level and sub-isolate-level genomic features to estimate genomic surveillance sample sizes for bacterial pathogens."),
 
   tabsetPanel(
     id = "feature_tabs",
@@ -726,8 +729,8 @@ ui <- fluidPage(
           numericInput("B", "Posterior draws", value = 2000, min = 100, step = 100),
           numericInput("seed", "Seed", value = 2026, step = 1),
           tags$hr(),
-          numericInput("target_coverage", "Target sample coverage", value = 0.95, min = 0.001, max = 0.999, step = 0.01),
-          numericInput("target_richness", "Target feature richness", value = 0.95, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("target_coverage", "Target sample coverage", value = 0.80, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("target_richness", "Target feature richness", value = 0.80, min = 0.001, max = 0.999, step = 0.01),
           numericInput("confidence_level", "Detection confidence", value = 0.95, min = 0.001, max = 0.999, step = 0.01),
           actionButton("run", "Run analysis", class = "btn-primary"),
           tags$hr(),
@@ -774,8 +777,8 @@ ui <- fluidPage(
           numericInput("B_sub", "Posterior draws", value = 2000, min = 100, step = 100),
           numericInput("seed_sub", "Seed", value = 2026, step = 1),
           tags$hr(),
-          numericInput("target_coverage_sub", "Target sample coverage", value = 0.95, min = 0.001, max = 0.999, step = 0.01),
-          numericInput("target_richness_sub", "Target feature richness", value = 0.95, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("target_coverage_sub", "Target sample coverage", value = 0.80, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("target_richness_sub", "Target feature richness", value = 0.80, min = 0.001, max = 0.999, step = 0.01),
           numericInput("confidence_level_sub", "Detection confidence", value = 0.95, min = 0.001, max = 0.999, step = 0.01),
           actionButton("run_sub", "Run analysis", class = "btn-primary"),
           tags$hr(),
@@ -813,14 +816,26 @@ server <- function(input, output, session) {
   subiso_results <- reactiveVal(NULL)
   isolate_error <- reactiveVal(NULL)
   subiso_error <- reactiveVal(NULL)
+  isolate_running <- reactiveVal(FALSE)
+  subiso_running <- reactiveVal(FALSE)
 
   output$isolate_status <- renderUI({
+    if (isolate_running()) {
+      return(div(class = "analysis-status",
+                 div(class = "analysis-spinner"),
+                 tags$span("Running analysis; this may take a little while...")))
+    }
     err <- isolate_error()
     if (is.null(err)) return(NULL)
     div(class = "error-box", HTML(paste0("<strong>Error:</strong> ", htmlEscape(err))))
   })
 
   output$subiso_status <- renderUI({
+    if (subiso_running()) {
+      return(div(class = "analysis-status",
+                 div(class = "analysis-spinner"),
+                 tags$span("Running analysis; this may take a little while...")))
+    }
     err <- subiso_error()
     if (is.null(err)) return(NULL)
     div(class = "error-box", HTML(paste0("<strong>Error:</strong> ", htmlEscape(err))))
@@ -851,8 +866,12 @@ server <- function(input, output, session) {
 
   observeEvent(input$run, {
     isolate_error(NULL)
+    isolate_running(TRUE)
     tryCatch({
+      shiny::withProgress(message = "Running isolate-level analysis", value = 0, {
+        shiny::incProgress(0.05, detail = "Reading input data")
       df <- read_isolate_table(input$file, input$csv_text, input$feature_col, input$count_col)
+        shiny::incProgress(0.10, detail = "Preparing priors")
       alpha_prior <- safe_num(input$alpha_prior)
       if (!is.finite(alpha_prior) || alpha_prior < 0) stop("alpha prior must be non-negative.")
       alpha_named <- stats::setNames(rep(alpha_prior, nrow(df)), as.character(df[[input$feature_col]]))
@@ -863,6 +882,7 @@ server <- function(input, output, session) {
       target_coverage <- validate_prob(input$target_coverage, "Target sample coverage")
       target_richness <- validate_prob(input$target_richness, "Target feature richness")
       confidence <- validate_prob(input$confidence_level, "Detection confidence")
+      shiny::incProgress(0.10, detail = "Estimating novel-feature mass")
       crp <- fit_crp_theta_bayes(
         counts = df$count,
         n_draws = 5000,
@@ -882,6 +902,7 @@ server <- function(input, output, session) {
       alpha_novel_num <- as.integer(ceiling(alpha_novel_sum_crp))
       alpha_novel_sum <- alpha_novel_num * alpha_prior
 
+      shiny::incProgress(0.20, detail = "Sampling posterior feature frequencies")
       fit <- isolate_bayes_dirichlet(
         df = df,
         feature_col = input$feature_col,
@@ -899,11 +920,13 @@ server <- function(input, output, session) {
         left_join(observed, by = "feature") |>
         mutate(estimate = median, lo = q2.5, hi = q97.5, dataset = "Uploaded data")
 
+      shiny::incProgress(0.25, detail = "Calculating sampling curves")
       prep <- prep_bootstrap_draws(fit$draws)
       mass_curve <- compute_mass_curve(prep, f_grid = f_grid_99)
       richness_curve <- compute_species_richness_curve(prep, f_grid = f_grid_99)
       req <- summarise_required_n(fit$draws, target_coverage, target_richness, confidence)
 
+      shiny::incProgress(0.20, detail = "Finalising results")
       isolate_results(list(
         raw = df,
         fit = fit,
@@ -923,13 +946,18 @@ server <- function(input, output, session) {
         B = B,
         seed = seed
       ))
-    }, error = function(e) isolate_error(conditionMessage(e)))
+      })
+    }, error = function(e) isolate_error(conditionMessage(e)), finally = isolate_running(FALSE))
   })
 
   observeEvent(input$run_sub, {
     subiso_error(NULL)
+    subiso_running(TRUE)
     tryCatch({
+      shiny::withProgress(message = "Running sub-isolate-level analysis", value = 0, {
+        shiny::incProgress(0.05, detail = "Reading input data")
       parsed <- read_subiso_table(input$file_sub, input$csv_text_sub)
+        shiny::incProgress(0.10, detail = "Detecting genes and preparing priors")
       iso_df <- parsed$data
       gene_cols <- parsed$gene_cols
       B <- as.integer(input$B_sub)
@@ -950,6 +978,7 @@ server <- function(input, output, session) {
       beta_novel_num <- as.integer(beta_novel_num)
       beta_novel_sum <- beta_novel_num * beta_prior
 
+      shiny::incProgress(0.15, detail = "Sampling posterior feature prevalences")
       bbs <- subisolate_bayes_beta(
         iso_df = iso_df,
         gene_cols = gene_cols,
@@ -973,10 +1002,12 @@ server <- function(input, output, session) {
         dataset_label = "Uploaded data"
       )
 
+      shiny::incProgress(0.25, detail = "Calculating sampling curves")
       mass_curve <- compute_mass_curve_subiso(p_mat, f_grid = f_grid_99)
       richness_curve <- compute_species_richness_subiso(p_mat, f_grid = f_grid_99)
       req <- summarise_required_n(p_mat, target_coverage, target_richness, confidence)
 
+      shiny::incProgress(0.20, detail = "Finalising results")
       subiso_results(list(
         raw = iso_df,
         id_col = parsed$id_col,
@@ -997,7 +1028,8 @@ server <- function(input, output, session) {
         B = B,
         seed = seed
       ))
-    }, error = function(e) subiso_error(conditionMessage(e)))
+      })
+    }, error = function(e) subiso_error(conditionMessage(e)), finally = subiso_running(FALSE))
   })
 
   output$isolate_summary <- renderUI({
