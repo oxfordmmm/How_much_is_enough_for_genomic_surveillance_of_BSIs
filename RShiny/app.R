@@ -298,8 +298,9 @@ compute_species_richness_curve <- function(prep, f_grid = NULL) {
   q_prop_025 <- matrixStats::colQuantiles(prop, probs = 0.025)
   q_prop_975 <- matrixStats::colQuantiles(prop, probs = 0.975)
 
-  data.frame(
+  out <- data.frame(
     f = f_grid,
+    sample_size = sample_size_grid_99[match(f_grid, f_grid_99)],
     median_species_count = matrixStats::colMedians(counts),
     sd_species_count = matrixStats::colSds(counts),
     q2.5 = q_counts[, 1],
@@ -309,6 +310,7 @@ compute_species_richness_curve <- function(prep, f_grid = NULL) {
     q2.5_species_proportion = q_prop_025,
     q97.5_species_proportion = q_prop_975
   )
+  out
 }
 
 compute_mass_curve <- function(prep, f_grid = NULL) {
@@ -328,13 +330,15 @@ compute_mass_curve <- function(prep, f_grid = NULL) {
   }
 
   q <- matrixStats::colQuantiles(masses, probs = c(0.025, 0.975))
-  data.frame(
+  out <- data.frame(
     f = f_grid,
+    sample_size = sample_size_grid_99[match(f_grid, f_grid_99)],
     median_mass = matrixStats::colMedians(masses),
     sd_mass = matrixStats::colSds(masses),
     q2.5 = q[, 1],
     q97.5 = q[, 2]
   )
+  out
 }
 
 # -----------------------------------------------------------------------------
@@ -479,8 +483,9 @@ compute_species_richness_subiso <- function(x, f_grid = NULL) {
   q_count <- matrixStats::colQuantiles(rich_mat, probs = c(0.025, 0.975), na.rm = TRUE)
   q_prop <- matrixStats::colQuantiles(prop_mat, probs = c(0.025, 0.975), na.rm = TRUE)
 
-  tibble::tibble(
+  out <- tibble::tibble(
     f = f_grid,
+    sample_size = sample_size_grid_99[match(f_grid, f_grid_99)],
     median_species_count = matrixStats::colMedians(rich_mat, na.rm = TRUE),
     q2.5_species_count = q_count[, 1],
     q97.5_species_count = q_count[, 2],
@@ -489,12 +494,14 @@ compute_species_richness_subiso <- function(x, f_grid = NULL) {
     q97.5_species_proportion = q_prop[, 2]
   ) |>
     filter(is.finite(f), !is.na(median_species_count))
+  out
 }
 
 compute_mass_curve_subiso <- function(x, f_grid = NULL) {
   p_mat <- get_p_matrix(x)
   B <- nrow(p_mat)
   if (is.null(f_grid)) f_grid <- default_subiso_f_grid()
+  f_grid <- sort(unique(f_grid[is.finite(f_grid)]))
   F <- length(f_grid)
   p_sorted <- t(apply(p_mat, 1, sort))
   cs <- matrixStats::rowCumsums(p_sorted)
@@ -510,13 +517,15 @@ compute_mass_curve_subiso <- function(x, f_grid = NULL) {
   }
 
   q_mass <- matrixStats::colQuantiles(mass_mat, probs = c(0.025, 0.975), na.rm = TRUE)
-  tibble::tibble(
+  out <- tibble::tibble(
     f = f_grid,
+    sample_size = sample_size_grid_99[match(f_grid, f_grid_99)],
     median_mass = matrixStats::colMedians(mass_mat, na.rm = TRUE),
     q2.5 = q_mass[, 1],
     q97.5 = q_mass[, 2]
   ) |>
     filter(is.finite(f), !is.na(median_mass))
+  out
 }
 
 summarise_subiso_posterior <- function(bbs, gene_cols, actual_vec, beta_named,
@@ -662,6 +671,98 @@ plotly_from_gg <- function(p) {
     plotly::layout(legend = list(orientation = "h", x = 0.1, y = -0.1))
 }
 
+# Explicit Plotly traces for the threshold curves. Using direct Plotly here avoids
+# ggplotly dropping/over-compressing the line when the exact 23,001-point grid is used.
+plot_frequency_curve_plotly <- function(curve, value_col, lo_col, hi_col,
+                                        y_title, title) {
+  curve <- curve[is.finite(curve$f) & is.finite(curve[[value_col]]), , drop = FALSE]
+  curve <- curve[order(curve$f), , drop = FALSE]
+
+  p <- plotly::plot_ly() |>
+    plotly::add_ribbons(
+      x = curve$f,
+      ymin = curve[[lo_col]],
+      ymax = curve[[hi_col]],
+      line = list(color = "rgba(0,0,0,0)"),
+      fillcolor = "rgba(31,119,180,0.16)",
+      hoverinfo = "skip",
+      showlegend = FALSE
+    ) |>
+    plotly::add_lines(
+      x = curve$f,
+      y = curve[[value_col]],
+      line = list(width = 3),
+      hovertemplate = paste0(
+        "Frequency: %{x:.6g}<br>",
+        y_title, ": %{y:.3f}<br>",
+        "95% CI: %{customdata[0]:.3f} - %{customdata[1]:.3f}<extra></extra>"
+      ),
+      customdata = cbind(curve[[lo_col]], curve[[hi_col]]),
+      showlegend = FALSE
+    ) |>
+    plotly::layout(
+      title = list(text = paste0("<b>", title, "</b>"), x = 0.5),
+      xaxis = list(title = "Frequency", type = "log"),
+      yaxis = list(title = y_title, range = c(0, 1)),
+      hovermode = "x unified"
+    )
+  p
+}
+
+plot_sample_size_curve_gg <- function(curve, value_col, lo_col, hi_col, y_title, title) {
+  curve <- curve[is.finite(curve$sample_size) & curve$sample_size > 0 &
+                   is.finite(curve[[value_col]]), , drop = FALSE]
+  ggplot2::ggplot(curve, ggplot2::aes(x = sample_size, y = .data[[value_col]])) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = .data[[lo_col]], ymax = .data[[hi_col]]), alpha = 0.15) +
+    ggplot2::geom_line(linewidth = 0.8) +
+    ggplot2::scale_x_log10(breaks = c(10, 100, 1000, 10000, 100000),
+                           labels = c("10", "100", "1,000", "10,000", "100,000")) +
+    ggplot2::scale_y_continuous(limits = c(0, 1)) +
+    ggplot2::labs(x = "Sample size", y = y_title, title = title) +
+    ggplot2::theme_minimal(base_size = 11)
+}
+
+plot_sample_size_curve_plotly <- function(curve, value_col, lo_col, hi_col,
+                                          y_title, title) {
+  curve <- curve[is.finite(curve$sample_size) & curve$sample_size > 0 &
+                   is.finite(curve[[value_col]]), , drop = FALSE]
+  curve <- curve[order(curve$sample_size), , drop = FALSE]
+
+  p <- plotly::plot_ly() |>
+    plotly::add_ribbons(
+      x = curve$sample_size,
+      ymin = curve[[lo_col]],
+      ymax = curve[[hi_col]],
+      line = list(color = "rgba(0,0,0,0)"),
+      fillcolor = "rgba(31,119,180,0.16)",
+      hoverinfo = "skip",
+      showlegend = FALSE
+    ) |>
+    plotly::add_lines(
+      x = curve$sample_size,
+      y = curve[[value_col]],
+      line = list(width = 3),
+      hovertemplate = paste0(
+        "Sample size: %{x:,.0f}<br>",
+        y_title, ": %{y:.3f}<extra></extra>"
+      ),
+      showlegend = FALSE
+    ) |>
+    plotly::layout(
+      title = list(text = paste0("<b>", title, "</b>"), x = 0.5),
+      xaxis = list(
+        title = "Sample size",
+        type = "log",
+        tickmode = "array",
+        tickvals = c(10, 100, 1000, 10000, 100000),
+        ticktext = c("10", "100", "1,000", "10,000", "100,000")
+      ),
+      yaxis = list(title = y_title, range = c(0, 1), tickmode = "linear", tick0 = 0, dtick = 0.2),
+      hovermode = "x unified"
+    )
+  p
+}
+
 # -----------------------------------------------------------------------------
 # Templates
 # -----------------------------------------------------------------------------
@@ -757,6 +858,10 @@ ui <- fluidPage(
             column(6, plotlyOutput("isolate_cov_req", height = 320)),
             column(6, plotlyOutput("isolate_rich_req", height = 320))
           ),
+          fluidRow(
+            column(6, plotlyOutput("isolate_coverage_by_n", height = 360)),
+            column(6, plotlyOutput("isolate_richness_by_n", height = 360))
+          ),
           tags$hr(),
           div(class = "app-intro", HTML(paste0("<strong>Citation:</strong> ", citation_text)))
         )
@@ -804,6 +909,10 @@ ui <- fluidPage(
           fluidRow(
             column(6, plotlyOutput("subiso_cov_req", height = 320)),
             column(6, plotlyOutput("subiso_rich_req", height = 320))
+          ),
+          fluidRow(
+            column(6, plotlyOutput("subiso_coverage_by_n", height = 360)),
+            column(6, plotlyOutput("subiso_richness_by_n", height = 360))
           ),
           tags$hr(),
           div(class = "app-intro", HTML(paste0("<strong>Citation:</strong> ", citation_text)))
@@ -1051,7 +1160,7 @@ server <- function(input, output, session) {
         "<p class='summary-help'>Prior pseudo-count of features.</p>",
         "<p><strong>Prior mass of novel features:</strong> ", signif(r$alpha_novel_sum, 5), "</p>",
         "<p><strong>Number of novel features:</strong> ", r$alpha_novel_num, "</p>",
-        "<p><strong>Sample sizes explored:</strong> ", format(min(sample_size_grid_99), big.mark = ","), "&ndash;", format(max(sample_size_grid_99), big.mark = ","), "</p>",
+        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid_99)), "&ndash;", format_n(max(sample_size_grid_99)), "</p>",
         "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
         " (95% interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
         "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
@@ -1072,9 +1181,9 @@ server <- function(input, output, session) {
         "<p class='summary-help'>Prior pseudo-count of each feature.</p>",
         "<p><strong>Novel feature probability:</strong> ", signif(r$u_hat, 5), "</p>",
         "<p class='summary-help'>Estimated using the Good-Turing estimator.</p>",
-        "<p><strong>Prior mass of novel features (beta_novel total mass):</strong> ", signif(r$beta_novel_sum, 5), "</p>",
+        "<p><strong>Prior mass of novel features:</strong> ", signif(r$beta_novel_sum, 5), "</p>",
         "<p><strong>Number of novel features:</strong> ", r$beta_novel_num, "</p>",
-        "<p><strong>Sample sizes explored:</strong> ", format(min(sample_size_grid_99), big.mark = ","), "&ndash;", format(max(sample_size_grid_99), big.mark = ","), "</p>",
+        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid_99)), "&ndash;", format_n(max(sample_size_grid_99)), "</p>",
         "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
         " (95% interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
         "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
@@ -1085,16 +1194,21 @@ server <- function(input, output, session) {
 
 
   output$isolate_obs_pred <- renderPlotly({ req(isolate_results()); plotly_from_gg(plot_obs_vs_pred(isolate_results()$feature_summary, "Observed vs posterior prevalence")) })
-  output$isolate_mass <- renderPlotly({ req(isolate_results()); plotly_from_gg(plot_mass_curve(isolate_results()$mass_curve, "Posterior population mass above threshold")) })
-  output$isolate_richness <- renderPlotly({ req(isolate_results()); plotly_from_gg(plot_richness_curve(isolate_results()$richness_curve, "Posterior feature richness above threshold")) })
+  output$isolate_mass <- renderPlotly({ req(isolate_results()); plot_frequency_curve_plotly(isolate_results()$mass_curve, "median_mass", "q2.5", "q97.5", "Population mass above frequency", "Posterior population mass above threshold") })
+  output$isolate_richness <- renderPlotly({ req(isolate_results()); plot_frequency_curve_plotly(isolate_results()$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Feature richness above frequency", "Posterior feature richness above threshold") })
   output$isolate_cov_req <- renderPlotly({ req(isolate_results()); plotly_from_gg(plot_required_hist(isolate_results()$required$coverage, "Required sample size: target coverage")) })
   output$isolate_rich_req <- renderPlotly({ req(isolate_results()); plotly_from_gg(plot_required_hist(isolate_results()$required$richness, "Required sample size: target richness")) })
 
   output$subiso_obs_pred <- renderPlotly({ req(subiso_results()); plotly_from_gg(plot_obs_vs_pred(subiso_results()$feature_summary, "Observed vs posterior prevalence")) })
-  output$subiso_mass <- renderPlotly({ req(subiso_results()); plotly_from_gg(plot_mass_curve(subiso_results()$mass_curve, "Posterior population mass above threshold")) })
-  output$subiso_richness <- renderPlotly({ req(subiso_results()); plotly_from_gg(plot_richness_curve(subiso_results()$richness_curve, "Posterior feature richness above threshold")) })
+  output$subiso_mass <- renderPlotly({ req(subiso_results()); plot_frequency_curve_plotly(subiso_results()$mass_curve, "median_mass", "q2.5", "q97.5", "Population mass above frequency", "Posterior population mass above threshold") })
+  output$subiso_richness <- renderPlotly({ req(subiso_results()); plot_frequency_curve_plotly(subiso_results()$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Feature richness above frequency", "Posterior feature richness above threshold") })
   output$subiso_cov_req <- renderPlotly({ req(subiso_results()); plotly_from_gg(plot_required_hist(subiso_results()$required$coverage, "Required sample size: target coverage")) })
   output$subiso_rich_req <- renderPlotly({ req(subiso_results()); plotly_from_gg(plot_required_hist(subiso_results()$required$richness, "Required sample size: target richness")) })
+
+  output$isolate_coverage_by_n <- renderPlotly({ req(isolate_results()); plot_sample_size_curve_plotly(isolate_results()$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size") })
+  output$isolate_richness_by_n <- renderPlotly({ req(isolate_results()); plot_sample_size_curve_plotly(isolate_results()$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size") })
+  output$subiso_coverage_by_n <- renderPlotly({ req(subiso_results()); plot_sample_size_curve_plotly(subiso_results()$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size") })
+  output$subiso_richness_by_n <- renderPlotly({ req(subiso_results()); plot_sample_size_curve_plotly(subiso_results()$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size") })
 
   output$download_csv <- downloadHandler(
     filename = function() paste0("nagy2026_isolate_summary_", Sys.Date(), ".csv"),
@@ -1137,6 +1251,8 @@ server <- function(input, output, session) {
       print(plot_richness_curve(r$richness_curve, "Posterior feature richness above threshold"))
       print(plot_required_hist(r$required$coverage, "Required sample size: target coverage"))
       print(plot_required_hist(r$required$richness, "Required sample size: target richness"))
+      print(plot_sample_size_curve_gg(r$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size"))
+      print(plot_sample_size_curve_gg(r$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size"))
     }
   )
 
@@ -1152,6 +1268,8 @@ server <- function(input, output, session) {
       print(plot_richness_curve(r$richness_curve, "Posterior feature richness above threshold"))
       print(plot_required_hist(r$required$coverage, "Required sample size: target coverage"))
       print(plot_required_hist(r$required$richness, "Required sample size: target richness"))
+      print(plot_sample_size_curve_gg(r$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size"))
+      print(plot_sample_size_curve_gg(r$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size"))
     }
   )
 }
