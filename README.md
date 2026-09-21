@@ -4,7 +4,11 @@ This repository contains code to estiamte the same size of bloostream infection 
 
 # Repository contents
 ## RShiny application
-The `RShiny` folder contains the code to easily apply this Bayesian sample size estimation method to your own data. Some example datasets are included. Please follow [think link](https://connect.posit.cloud/dorottyanagy96/content/01a0c3dd-90d2-e597-58a5-51391a468387) for the deloyed version of the sample size estimator tool. The README.md within the RShiny folder contains further information on how to use the tool.
+The `RShiny` folder contains the code to easily apply this Bayesian sample size estimation method to your own data. Some example datasets are included. Please follow [think link](https://connect.posit.cloud/dorottyanagy96/content/01a0c3dd-90d2-e597-58a5-51391a468387) for the deloyed version of the sample size estimator tool. 
+
+The tool can take up to a few minutes to run, especially with large datasets, so please be patient for results.
+
+The README.md within the RShiny folder contains further information on how to use the tool.
 
 ## R scripts
 The `R_scripts` folder containd R analysis scripts for generating fastBAPS clusters, performing comparison of ecological estimators to Bayesian analysis, and performing Bayesian estimation of sample size for standard and hierarchical models.
