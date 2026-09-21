@@ -9,6 +9,8 @@ The application accompanies the methods described in:
 ## Usage
 Please go to [this link](https://connect.posit.cloud/dorottyanagy96/content/01a0c3dd-90d2-e597-58a5-51391a468387) to use the deployed app in Posit Cloud Connect.
 
+The tool can take up to a few minutes to run, especially with large datasets, so please be patient for results.
+
 The application provides two analysis frameworks.
 
 ### Isolate-level features
