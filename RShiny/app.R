@@ -267,13 +267,14 @@ prep_bootstrap_draws <- function(draws) {
   list(x_sorted = x_sorted, cumsums = cs, totals = rowSums(x_sorted))
 }
 
+sample_size_grid_99 <- c(
+  seq(0, 10000, by = 1),
+  seq(10005, 50000, by = 5),
+  seq(50010, 100000, by = 10)
+)
+
 default_f_grid <- function() {
-  n_grid <- c(
-    seq(0, 10000, by = 1),
-    seq(10005, 50000, by = 5),
-    seq(50010, 100000, by = 10)
-  )
-  1 - ((1 - 0.99)^(1 / n_grid))
+  1 - ((1 - 0.99)^(1 / sample_size_grid_99))
 }
 
 f_grid_99 <- default_f_grid()
@@ -283,6 +284,7 @@ compute_species_richness_curve <- function(prep, f_grid = NULL) {
   B <- nrow(x_sorted)
   K <- ncol(x_sorted)
   if (is.null(f_grid)) f_grid <- default_f_grid()
+  f_grid <- sort(unique(f_grid[is.finite(f_grid)]))
   F <- length(f_grid)
   counts <- matrix(0L, nrow = B, ncol = F)
 
@@ -315,6 +317,7 @@ compute_mass_curve <- function(prep, f_grid = NULL) {
   totals <- prep$totals
   B <- nrow(x_sorted)
   if (is.null(f_grid)) f_grid <- default_f_grid()
+  f_grid <- sort(unique(f_grid[is.finite(f_grid)]))
   F <- length(f_grid)
   masses <- matrix(0, nrow = B, ncol = F)
 
@@ -462,6 +465,7 @@ compute_species_richness_subiso <- function(x, f_grid = NULL) {
   B <- nrow(p_mat)
   K <- ncol(p_mat)
   if (is.null(f_grid)) f_grid <- default_subiso_f_grid()
+  f_grid <- sort(unique(f_grid[is.finite(f_grid)]))
   F <- length(f_grid)
   p_sorted <- t(apply(p_mat, 1, sort))
   rich_mat <- matrix(0L, nrow = B, ncol = F)
@@ -624,7 +628,7 @@ plot_mass_curve <- function(curve, title) {
     geom_line(linewidth = 0.8) +
     scale_x_log10() +
     coord_cartesian(ylim = c(0, 1)) +
-    labs(x = "Threshold f", y = "Population mass above f", title = title) +
+    labs(x = "Frequency", y = "Population mass above frequency", title = title) +
     theme_minimal(base_size = 11) +
     theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 }
@@ -639,7 +643,7 @@ plot_richness_curve <- function(curve, title) {
     geom_line(linewidth = 0.8) +
     scale_x_log10() +
     coord_cartesian(ylim = c(0, 1)) +
-    labs(x = "Threshold f", y = "Feature richness proportion", title = title) +
+    labs(x = "Frequency", y = "Feature richness above frequency", title = title) +
     theme_minimal(base_size = 11) +
     theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 }
@@ -693,6 +697,8 @@ ui <- fluidPage(
       .app-intro { color:#6f6f6f; font-style:italic; line-height:1.4; margin-bottom:14px; }\
       .param-help { color:#777; font-size:.85em; line-height:1.25; margin-top:-6px; margin-bottom:8px; }\
       .summary-box { padding:12px; border:1px solid #e5e5e5; border-radius:6px; background:#fff; line-height:1.45; }\
+      .summary-help { color:#777; font-style:italic; font-size:.85em; margin-top:-8px; margin-bottom:8px; }\
+      .sample-size-result { font-size:1.12em; line-height:1.5; margin-top:10px; margin-bottom:0; }\
       .status-box { padding:8px 10px; background:#f7f7f7; border:1px solid #e5e5e5; border-radius:6px; margin-bottom:10px; }\
       .error-box { padding:8px 10px; background:#fff2f2; border:1px solid #f0c0c0; border-radius:6px; margin-bottom:10px; color:#9b1c1c; }\
       .detected-box { padding:8px 10px; background:#f7fafc; border:1px solid #dce6ef; border-radius:6px; margin-top:6px; margin-bottom:10px; }\
@@ -1039,16 +1045,17 @@ server <- function(input, output, session) {
       HTML(paste0(
         "<p><strong>Observed isolates:</strong> ", format(sum(r$raw$count), big.mark = ","), "</p>",
         "<p><strong>Observed feature categories:</strong> ", nrow(r$raw), "</p>",
-        "<p><strong>CRP estimated next-feature probability:</strong> ", signif(r$novelty_prob_hat, 4), "</p>",
+        "<p><strong>Novel feature probability:</strong> ", signif(r$novelty_prob_hat, 4), "</p>",
+        "<p class='summary-help'>Estimated using the Chinese restaurant process.</p>",
         "<p><strong>alpha prior:</strong> ", signif(r$alpha_prior, 5), "</p>",
-        "<p><strong>CRP-derived novel prior mass (before ceiling):</strong> ", signif(r$alpha_novel_sum_crp, 5), "</p>",
-        "<p><strong>Novel prior mass used:</strong> ", signif(r$alpha_novel_sum, 5), "</p>",
-        "<p><strong>Novel feature categories derived:</strong> ", r$alpha_novel_num, "</p>",
-        "<p><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
+        "<p class='summary-help'>Prior pseudo-count of features.</p>",
+        "<p><strong>Prior mass of novel features:</strong> ", signif(r$alpha_novel_sum, 5), "</p>",
+        "<p><strong>Number of novel features:</strong> ", r$alpha_novel_num, "</p>",
+        "<p><strong>Sample sizes explored:</strong> ", format(min(sample_size_grid_99), big.mark = ","), "&ndash;", format(max(sample_size_grid_99), big.mark = ","), "</p>",
+        "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
         " (95% interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
-        "<p><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
-        " (95% interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>",
-        "<p><strong>99% detection f-grid:</strong> exact expression (no rounding; ", length(f_grid_99), " points; n = 0 through 100,000)</p>"
+        "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
+        " (95% interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>"
       ))
     )
   })
@@ -1062,17 +1069,20 @@ server <- function(input, output, session) {
         "<p><strong>Isolates:</strong> ", nrow(r$raw), "</p>",
         "<p><strong>Automatically detected gene/feature columns:</strong> ", length(r$gene_cols), "</p>",
         "<p><strong>beta prior:</strong> ", signif(r$beta_prior, 4), "</p>",
-        "<p><strong>Estimated u_hat:</strong> ", signif(r$u_hat, 5), "</p>",
-        "<p><strong>Novel feature categories derived:</strong> ", r$beta_novel_num, "</p>",
-        "<p><strong>beta_novel total mass:</strong> ", signif(r$beta_novel_sum, 5), "</p>",
-        "<p><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
+        "<p class='summary-help'>Prior pseudo-count of each feature.</p>",
+        "<p><strong>Novel feature probability:</strong> ", signif(r$u_hat, 5), "</p>",
+        "<p class='summary-help'>Estimated using the Good-Turing estimator.</p>",
+        "<p><strong>Prior mass of novel features (beta_novel total mass):</strong> ", signif(r$beta_novel_sum, 5), "</p>",
+        "<p><strong>Number of novel features:</strong> ", r$beta_novel_num, "</p>",
+        "<p><strong>Sample sizes explored:</strong> ", format(min(sample_size_grid_99), big.mark = ","), "&ndash;", format(max(sample_size_grid_99), big.mark = ","), "</p>",
+        "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
         " (95% interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
-        "<p><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
-        " (95% interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>",
-        "<p><strong>99% detection f-grid:</strong> exact expression (no rounding; ", length(f_grid_99), " points; n = 0 through 100,000)</p>"
+        "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
+        " (95% interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>"
       ))
     )
   })
+
 
   output$isolate_obs_pred <- renderPlotly({ req(isolate_results()); plotly_from_gg(plot_obs_vs_pred(isolate_results()$feature_summary, "Observed vs posterior prevalence")) })
   output$isolate_mass <- renderPlotly({ req(isolate_results()); plotly_from_gg(plot_mass_curve(isolate_results()$mass_curve, "Posterior population mass above threshold")) })
