@@ -9541,9 +9541,9 @@ plot_regional_holdout_heatmap_subiso_one_combo <- function(regional_results,
     ) +
     scale_alpha_identity(guide = "none") +
     labs(
-      x = expression(beta[i]),
+      x = expression(beta),
       y = expression(m),
-      title = bquote(beta[ii] == .(beta_value) ~ "," ~ lambda[sigma*log(tau)] == .(sigma_value))
+      title = bquote(beta * "’" == .(beta_value) ~ "," ~ lambda[sigma*log(tau)] == .(sigma_value))
     ) +
     coord_cartesian(clip = "off") +
     theme_minimal(base_size = 11) +
