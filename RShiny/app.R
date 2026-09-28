@@ -808,7 +808,7 @@ ui <- fluidPage(
       @keyframes spin { to { transform:rotate(360deg); } }\
     "))
   ),
-  titlePanel("How much is enough? Genomic surveillance sampling-frame estimator for bacterial pathogens"),
+  titlePanel("SENTRY - Sampling frame Estimation for geNomic surveillance of microbial diversiTY"),
   div(class = "app-intro",
       "Bayesian analysis of isolate-level and sub-isolate-level genomic features to estimate genomic surveillance sample sizes for bacterial pathogens."),
 
