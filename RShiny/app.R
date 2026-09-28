@@ -808,7 +808,7 @@ ui <- fluidPage(
       @keyframes spin { to { transform:rotate(360deg); } }\
     "))
   ),
-  titlePanel("SENTRY - Sampling frame Estimation for geNomic surveillance of microbial diversiTY"),
+  titlePanel("EpiSENTRY - Epidemiological Sampling frame Estimation for geNomic surveillance of microbial diversiTY"),
   div(class = "app-intro",
       "Bayesian analysis of isolate-level and sub-isolate-level genomic features to estimate genomic surveillance sample sizes for bacterial pathogens."),
 
