@@ -286,7 +286,7 @@ sample_size_from_frequency <- function(f, confidence = 0.99) {
   ok <- is.finite(f) & f > 0 & f < 1
   out[ok] <- log(1 - confidence) / log(1 - f[ok])
   out[is.finite(f) & f >= 1] <- 0
-  round(out)
+  ceiling(out)
 }
 
 compute_species_richness_curve <- function(prep, f_grid = NULL, confidence = 0.99) {
@@ -658,6 +658,42 @@ format_n <- function(x) {
   format(round(x), big.mark = ",", scientific = FALSE, trim = TRUE)
 }
 
+# Manuscript-style sample-size estimate: first sample size at which the
+# posterior median curve reaches the target. The interval is obtained by
+# inverting the upper and lower 95% posterior curves, respectively.
+summarise_required_from_curve <- function(curve, value_col, lo_col, hi_col, target) {
+  d <- curve[is.finite(curve$sample_size) & curve$sample_size > 0, , drop = FALSE]
+  if (nrow(d) == 0) {
+    return(c(median = NA_real_, q2.5 = NA_real_, q97.5 = NA_real_))
+  }
+
+  first_n <- function(col) {
+    ok <- is.finite(d[[col]]) & d[[col]] >= target
+    if (!any(ok)) return(NA_real_)
+    min(d$sample_size[ok], na.rm = TRUE)
+  }
+
+  c(
+    median = first_n(value_col),
+    q2.5 = first_n(hi_col),
+    q97.5 = first_n(lo_col)
+  )
+}
+
+summarise_required_from_curves <- function(mass_curve, richness_curve,
+                                            target_coverage, target_richness) {
+  list(
+    coverage_summary = summarise_required_from_curve(
+      mass_curve, "median_mass", "q2.5", "q97.5", target_coverage
+    ),
+    richness_summary = summarise_required_from_curve(
+      richness_curve, "median_species_proportion",
+      "q2.5_species_proportion", "q97.5_species_proportion",
+      target_richness
+    )
+  )
+}
+
 # -----------------------------------------------------------------------------
 # Plot helpers
 # -----------------------------------------------------------------------------
@@ -768,7 +804,7 @@ plot_frequency_curve_plotly <- function(curve, value_col, lo_col, hi_col,
   p
 }
 
-plot_sample_size_curve_gg <- function(curve, value_col, lo_col, hi_col, y_title, title) {
+plot_sample_size_curve_gg <- function(curve, value_col, lo_col, hi_col, y_title, title, target = NULL) {
   curve <- curve[is.finite(curve$sample_size) & curve$sample_size > 0 &
                    is.finite(curve[[value_col]]), , drop = FALSE]
   ggplot2::ggplot(curve, ggplot2::aes(x = sample_size, y = .data[[value_col]])) +
@@ -778,11 +814,12 @@ plot_sample_size_curve_gg <- function(curve, value_col, lo_col, hi_col, y_title,
                            labels = c("10", "100", "1,000", "10,000", "100,000")) +
     ggplot2::scale_y_continuous(limits = c(0, 1)) +
     ggplot2::labs(x = "Sample size", y = y_title, title = title) +
-    ggplot2::theme_minimal(base_size = 11)
+    ggplot2::theme_minimal(base_size = 11) +
+    { if (!is.null(target)) ggplot2::geom_hline(yintercept = target, linetype = "dashed", alpha = 0.45) else NULL }
 }
 
 plot_sample_size_curve_plotly <- function(curve, value_col, lo_col, hi_col,
-                                          y_title, title) {
+                                          y_title, title, target = NULL) {
   curve <- curve[is.finite(curve$sample_size) & curve$sample_size > 0 &
                    is.finite(curve[[value_col]]), , drop = FALSE]
   curve <- curve[order(curve$sample_size), , drop = FALSE]
@@ -818,6 +855,12 @@ plot_sample_size_curve_plotly <- function(curve, value_col, lo_col, hi_col,
         ticktext = c("10", "100", "1,000", "10,000", "100,000")
       ),
       yaxis = list(title = y_title, range = c(0, 1), tickmode = "linear", tick0 = 0, dtick = 0.2),
+      shapes = if (!is.null(target)) list(list(
+        type = "line",
+        xref = "paper", x0 = 0, x1 = 1,
+        yref = "y", y0 = target, y1 = target,
+        line = list(color = "rgba(80,80,80,0.55)", width = 1.5, dash = "dash")
+      )) else list(),
       hovermode = "x unified"
     )
   p
@@ -877,6 +920,10 @@ ui <- fluidPage(
       .panel-intro { color:#666; font-size:.88em; line-height:1.35; margin-bottom:12px; min-height:58px; }\
       .plot-help { color:#777; font-size:.82em; line-height:1.35; margin:4px 6px 22px 6px; }\
       .plot-separator { border-top:1px solid rgba(0,0,0,.08); margin:8px 0 10px 0; }\
+      .headline-result { font-size:1.28em; line-height:1.45; font-weight:600; margin:10px 0 14px 0; }\
+      .section-title { font-size:1.45em; font-weight:700; margin:20px 0 10px 0; }\
+      .input-summary-title { font-size:1.35em; font-weight:700; margin:0 0 10px 0; }\
+      .top-result-panel { min-height:560px; }\
       @keyframes spin { to { transform:rotate(360deg); } }\
     "))
   ),
@@ -954,7 +1001,7 @@ ui <- fluidPage(
                        value = 0.80, min = 0.001, max = 0.999, step = 0.01),
           numericInput("confidence_level",
                        label = tagList("Detection confidence", div(class = "field-help", "How confident do you want to be of detecting each feature?")),
-                       value = 0.99, min = 0.001, max = 0.999, step = 0.01),
+                       value = 0.90, min = 0.001, max = 0.999, step = 0.01),
           actionButton("run", "Run analysis", class = "btn-primary"),
           tags$hr(),
           downloadButton("download_csv", "Download summary CSV"),
@@ -963,39 +1010,49 @@ ui <- fluidPage(
         mainPanel(
           uiOutput("isolate_status"),
           fluidRow(
-            column(5, htmlOutput("isolate_summary")),
-            column(7,
-                   plotlyOutput("isolate_obs_pred", height = 420),
-                   div(class = "plot-help",
-                       "Observed feature prevalence is compared with the posterior median prevalence and 95% credible interval. Points close to the diagonal indicate close agreement between the observed and posterior estimates."))
+            column(6,
+              div(class = "plot-panel coverage-panel top-result-panel",
+                  tags$h3("Coverage"),
+                  div(class = "panel-intro", "Coverage is the proportion of the population represented by features detected at least once in the sample."),
+                  uiOutput("isolate_coverage_headline"),
+                  plotlyOutput("isolate_coverage_by_n", height = 360),
+                  div(class = "plot-help", "Shows how estimated population coverage increases with sample size. The dashed line marks the user-selected target coverage.")
+              )
+            ),
+            column(6,
+              div(class = "plot-panel richness-panel top-result-panel",
+                  tags$h3("Feature richness"),
+                  div(class = "panel-intro", "Feature richness is the proportion of modelled unique feature categories expected to be detected. The modelled total includes both observed and predicted novel feature categories."),
+                  uiOutput("isolate_richness_headline"),
+                  plotlyOutput("isolate_richness_by_n", height = 360),
+                  div(class = "plot-help", "Shows how the proportion of modelled unique feature categories expected to be detected increases with sample size. The dashed line marks the user-selected target richness.")
+              )
+            )
           ),
+          htmlOutput("isolate_summary"),
+          div(class = "section-title", "Detailed plots of posterior estimation"),
+          plotlyOutput("isolate_obs_pred", height = 420),
+          div(class = "plot-help",
+              "Observed feature prevalence is compared with the posterior median prevalence and 95% credible interval. Points close to the diagonal indicate close agreement between the observed and posterior estimates."),
           fluidRow(
             column(6,
               div(class = "plot-panel coverage-panel",
                   tags$h3("Coverage"),
-                  div(class = "panel-intro", "Coverage is the proportion of the population represented by features detected at least once in the sample."),
-                  plotlyOutput("isolate_coverage_by_n", height = 360),
-                  div(class = "plot-help", "Shows how estimated population coverage increases with sample size. Use this plot to see the sample size associated with a desired population coverage."),
-                  div(class = "plot-separator"),
                   plotlyOutput("isolate_mass", height = 360),
                   div(class = "plot-help", "Shows the posterior population mass contributed by features whose frequency is above each frequency threshold. Lower thresholds include progressively rarer features."),
                   div(class = "plot-separator"),
                   plotlyOutput("isolate_cov_req", height = 320),
-                  div(class = "plot-help", "Shows uncertainty in the sample size required to reach the selected target coverage across posterior draws.")
+                  div(class = "plot-help", "Shows the posterior-draw distribution of sample sizes associated with the selected target coverage. The headline estimate above follows the manuscript curve-based calculation.")
               )
             ),
             column(6,
               div(class = "plot-panel richness-panel",
                   tags$h3("Feature richness"),
-                  div(class = "panel-intro", "Richness is the proportion of modelled unique feature categories expected to be detected. In this implementation, the modelled total includes both observed feature categories and the predicted novel feature categories."),
-                  plotlyOutput("isolate_richness_by_n", height = 360),
-                  div(class = "plot-help", "Shows how the proportion of modelled unique feature categories expected to be detected increases with sample size. The denominator includes the predicted novel feature categories as well as those observed in the input data."),
-                  div(class = "plot-separator"),
                   plotlyOutput("isolate_richness", height = 360),
-                  div(class = "plot-help", "Shows the proportion of modelled feature categories with frequency above each threshold. This includes predicted novel feature categories in the modelled feature total."),
+                  div(class = "plot-help", "Shows the proportion of modelled feature categories with frequency above each threshold, including predicted novel feature categories."),
                   div(class = "plot-separator"),
                   plotlyOutput("isolate_rich_req", height = 320),
-                  div(class = "plot-help", "Shows uncertainty in the sample size required to reach the selected target feature richness across posterior draws.")
+                  div(class = "plot-help", "Shows the posterior-draw distribution of sample sizes associated with the selected target feature richness. The headline estimate above follows the manuscript curve-based calculation.")
               )
             )
           ),
@@ -1037,7 +1094,7 @@ ui <- fluidPage(
                        value = 0.80, min = 0.001, max = 0.999, step = 0.01),
           numericInput("confidence_level_sub",
                        label = tagList("Detection confidence", div(class = "field-help", "How confident do you want to be of detecting each feature?")),
-                       value = 0.99, min = 0.001, max = 0.999, step = 0.01),
+                       value = 0.90, min = 0.001, max = 0.999, step = 0.01),
           actionButton("run_sub", "Run analysis", class = "btn-primary"),
           tags$hr(),
           downloadButton("download_csv_sub", "Download summary CSV"),
@@ -1046,39 +1103,49 @@ ui <- fluidPage(
         mainPanel(
           uiOutput("subiso_status"),
           fluidRow(
-            column(5, htmlOutput("subiso_summary")),
-            column(7,
-                   plotlyOutput("subiso_obs_pred", height = 420),
-                   div(class = "plot-help",
-                       "Observed feature prevalence is compared with the posterior median prevalence and 95% credible interval. Points close to the diagonal indicate close agreement between the observed and posterior estimates."))
+            column(6,
+              div(class = "plot-panel coverage-panel top-result-panel",
+                  tags$h3("Coverage"),
+                  div(class = "panel-intro", "Coverage is the proportion of the population represented by features detected at least once in the sample."),
+                  uiOutput("subiso_coverage_headline"),
+                  plotlyOutput("subiso_coverage_by_n", height = 360),
+                  div(class = "plot-help", "Shows how estimated population coverage increases with sample size. The dashed line marks the user-selected target coverage.")
+              )
+            ),
+            column(6,
+              div(class = "plot-panel richness-panel top-result-panel",
+                  tags$h3("Feature richness"),
+                  div(class = "panel-intro", "Feature richness is the proportion of modelled unique features expected to be detected. The modelled total includes both observed and predicted novel features."),
+                  uiOutput("subiso_richness_headline"),
+                  plotlyOutput("subiso_richness_by_n", height = 360),
+                  div(class = "plot-help", "Shows how the proportion of modelled unique features expected to be detected increases with sample size. The dashed line marks the user-selected target richness.")
+              )
+            )
           ),
+          htmlOutput("subiso_summary"),
+          div(class = "section-title", "Detailed plots of posterior estimation"),
+          plotlyOutput("subiso_obs_pred", height = 420),
+          div(class = "plot-help",
+              "Observed feature prevalence is compared with the posterior median prevalence and 95% credible interval. Points close to the diagonal indicate close agreement between the observed and posterior estimates."),
           fluidRow(
             column(6,
               div(class = "plot-panel coverage-panel",
                   tags$h3("Coverage"),
-                  div(class = "panel-intro", "Coverage is the proportion of the population represented by features detected at least once in the sample."),
-                  plotlyOutput("subiso_coverage_by_n", height = 360),
-                  div(class = "plot-help", "Shows how estimated population coverage increases with sample size. Use this plot to see the sample size associated with a desired population coverage."),
-                  div(class = "plot-separator"),
                   plotlyOutput("subiso_mass", height = 360),
                   div(class = "plot-help", "Shows the posterior population mass contributed by features whose prevalence is above each frequency threshold. Lower thresholds include progressively rarer features."),
                   div(class = "plot-separator"),
                   plotlyOutput("subiso_cov_req", height = 320),
-                  div(class = "plot-help", "Shows uncertainty in the sample size required to reach the selected target coverage across posterior draws.")
+                  div(class = "plot-help", "Shows the posterior-draw distribution of sample sizes associated with the selected target coverage. The headline estimate above follows the manuscript curve-based calculation.")
               )
             ),
             column(6,
               div(class = "plot-panel richness-panel",
                   tags$h3("Feature richness"),
-                  div(class = "panel-intro", "Richness is the proportion of modelled unique feature categories expected to be detected. In this implementation, the modelled total includes both observed gene/feature columns and the predicted novel feature categories."),
-                  plotlyOutput("subiso_richness_by_n", height = 360),
-                  div(class = "plot-help", "Shows how the proportion of modelled unique features expected to be detected increases with sample size. The denominator includes predicted novel features as well as the feature columns observed in the input data."),
-                  div(class = "plot-separator"),
                   plotlyOutput("subiso_richness", height = 360),
-                  div(class = "plot-help", "Shows the proportion of modelled feature categories with prevalence above each threshold. This includes predicted novel features in the modelled feature total."),
+                  div(class = "plot-help", "Shows the proportion of modelled feature categories with prevalence above each threshold, including predicted novel features."),
                   div(class = "plot-separator"),
                   plotlyOutput("subiso_rich_req", height = 320),
-                  div(class = "plot-help", "Shows uncertainty in the sample size required to reach the selected target feature richness across posterior draws.")
+                  div(class = "plot-help", "Shows the posterior-draw distribution of sample sizes associated with the selected target feature richness. The headline estimate above follows the manuscript curve-based calculation.")
               )
             )
           ),
@@ -1209,6 +1276,9 @@ server <- function(input, output, session) {
       mass_curve <- compute_mass_curve(prep, f_grid = f_grid_run, confidence = confidence)
       richness_curve <- compute_species_richness_curve(prep, f_grid = f_grid_run, confidence = confidence)
       req <- summarise_required_n(fit$draws, target_coverage, target_richness, confidence)
+      manuscript_req <- summarise_required_from_curves(
+        mass_curve, richness_curve, target_coverage, target_richness
+      )
 
       shiny::incProgress(0.20, detail = "Finalising results")
       isolate_results(list(
@@ -1219,6 +1289,7 @@ server <- function(input, output, session) {
         mass_curve = mass_curve,
         richness_curve = richness_curve,
         required = req,
+        manuscript_required = manuscript_req,
         alpha_prior = alpha_prior,
         alpha_novel_sum = alpha_novel_sum,
         alpha_novel_sum_crp = alpha_novel_sum_crp,
@@ -1287,10 +1358,16 @@ server <- function(input, output, session) {
       )
 
       shiny::incProgress(0.25, detail = "Calculating sampling curves")
-      f_grid_run <- frequency_grid_for_confidence(confidence)
+      # Match the manuscript workflow: calculate posterior curves on the fixed
+      # 99%-derived frequency grid, then convert each frequency threshold to
+      # the user-selected detection confidence when expressing sample size.
+      f_grid_run <- f_grid_99
       mass_curve <- compute_mass_curve_subiso(p_mat, f_grid = f_grid_run, confidence = confidence)
       richness_curve <- compute_species_richness_subiso(p_mat, f_grid = f_grid_run, confidence = confidence)
       req <- summarise_required_n_subiso(p_mat, target_coverage, target_richness, confidence)
+      manuscript_req <- summarise_required_from_curves(
+        mass_curve, richness_curve, target_coverage, target_richness
+      )
 
       shiny::incProgress(0.20, detail = "Finalising results")
       subiso_results(list(
@@ -1302,6 +1379,7 @@ server <- function(input, output, session) {
         mass_curve = mass_curve,
         richness_curve = richness_curve,
         required = req,
+        manuscript_required = manuscript_req,
         beta_prior = beta_prior,
         u_hat = u_hat,
         beta_named = beta_named,
@@ -1317,10 +1395,55 @@ server <- function(input, output, session) {
     }, error = function(e) subiso_error(conditionMessage(e)), finally = subiso_running(FALSE))
   })
 
+  output$isolate_coverage_headline <- renderUI({
+    req(isolate_results())
+    r <- isolate_results()
+    x <- r$manuscript_required$coverage_summary
+    tags$div(class = "headline-result", HTML(paste0(
+      "The estimated sample size to reach ", round(100 * r$target_coverage),
+      "% coverage is: ", format_n(x["median"]),
+      " (95% credible interval ", format_n(x["q2.5"]), "-", format_n(x["q97.5"]), ")."
+    )))
+  })
+
+  output$isolate_richness_headline <- renderUI({
+    req(isolate_results())
+    r <- isolate_results()
+    x <- r$manuscript_required$richness_summary
+    tags$div(class = "headline-result", HTML(paste0(
+      "The estimated sample size to reach ", round(100 * r$target_richness),
+      "% feature richness is: ", format_n(x["median"]),
+      " (95% credible interval ", format_n(x["q2.5"]), "-", format_n(x["q97.5"]), ")."
+    )))
+  })
+
+  output$subiso_coverage_headline <- renderUI({
+    req(subiso_results())
+    r <- subiso_results()
+    x <- r$manuscript_required$coverage_summary
+    tags$div(class = "headline-result", HTML(paste0(
+      "The estimated sample size to reach ", round(100 * r$target_coverage),
+      "% coverage is: ", format_n(x["median"]),
+      " (95% credible interval ", format_n(x["q2.5"]), "-", format_n(x["q97.5"]), ")."
+    )))
+  })
+
+  output$subiso_richness_headline <- renderUI({
+    req(subiso_results())
+    r <- subiso_results()
+    x <- r$manuscript_required$richness_summary
+    tags$div(class = "headline-result", HTML(paste0(
+      "The estimated sample size to reach ", round(100 * r$target_richness),
+      "% feature richness is: ", format_n(x["median"]),
+      " (95% credible interval ", format_n(x["q2.5"]), "-", format_n(x["q97.5"]), ")."
+    )))
+  })
+
   output$isolate_summary <- renderUI({
     req(isolate_results())
     r <- isolate_results()
     tags$div(class = "summary-box",
+      tags$div(class = "input-summary-title", "Input data summary"),
       HTML(paste0(
         "<p><strong>Observed isolates:</strong> ", format(sum(r$raw$count), big.mark = ","), "</p>",
         "<p><strong>Observed feature categories:</strong> ", nrow(r$raw), "</p>",
@@ -1330,11 +1453,7 @@ server <- function(input, output, session) {
         "<p class='summary-help'>Prior pseudo-count of features.</p>",
         "<p><strong>Prior mass of novel features:</strong> ", signif(r$alpha_novel_sum, 5), "</p>",
         "<p><strong>Number of novel features:</strong> ", r$alpha_novel_num, "</p>",
-        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid)), "&ndash;", format_n(max(sample_size_grid)), "</p>",
-        "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
-        " (95% credible interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
-        "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
-        " (95% credible interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>"
+        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid)), "&ndash;", format_n(max(sample_size_grid)), "</p>"
       ))
     )
   })
@@ -1343,6 +1462,7 @@ server <- function(input, output, session) {
     req(subiso_results())
     r <- subiso_results()
     tags$div(class = "summary-box",
+      tags$div(class = "input-summary-title", "Input data summary"),
       HTML(paste0(
         "<p><strong>Isolate ID column:</strong> ", htmlEscape(r$id_col), "</p>",
         "<p><strong>Isolates:</strong> ", nrow(r$raw), "</p>",
@@ -1353,11 +1473,7 @@ server <- function(input, output, session) {
         "<p class='summary-help'>Estimated using the Good-Turing estimator.</p>",
         "<p><strong>Prior mass of novel features:</strong> ", signif(r$beta_novel_sum, 5), "</p>",
         "<p><strong>Number of novel features:</strong> ", r$beta_novel_num, "</p>",
-        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid)), "&ndash;", format_n(max(sample_size_grid)), "</p>",
-        "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
-        " (95% credible interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
-        "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
-        " (95% credible interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>"
+        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid)), "&ndash;", format_n(max(sample_size_grid)), "</p>"
       ))
     )
   })
@@ -1375,10 +1491,10 @@ server <- function(input, output, session) {
   output$subiso_cov_req <- renderPlotly({ req(subiso_results()); plotly_from_gg(plot_required_hist(subiso_results()$required$coverage, "Required sample size: target coverage")) })
   output$subiso_rich_req <- renderPlotly({ req(subiso_results()); plotly_from_gg(plot_required_hist(subiso_results()$required$richness, "Required sample size: target richness")) })
 
-  output$isolate_coverage_by_n <- renderPlotly({ req(isolate_results()); plot_sample_size_curve_plotly(isolate_results()$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size") })
-  output$isolate_richness_by_n <- renderPlotly({ req(isolate_results()); plot_sample_size_curve_plotly(isolate_results()$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size") })
-  output$subiso_coverage_by_n <- renderPlotly({ req(subiso_results()); plot_sample_size_curve_plotly(subiso_results()$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size") })
-  output$subiso_richness_by_n <- renderPlotly({ req(subiso_results()); plot_sample_size_curve_plotly(subiso_results()$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size") })
+  output$isolate_coverage_by_n <- renderPlotly({ req(isolate_results()); plot_sample_size_curve_plotly(isolate_results()$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size", target = isolate_results()$target_coverage) })
+  output$isolate_richness_by_n <- renderPlotly({ req(isolate_results()); plot_sample_size_curve_plotly(isolate_results()$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size", target = isolate_results()$target_richness) })
+  output$subiso_coverage_by_n <- renderPlotly({ req(subiso_results()); plot_sample_size_curve_plotly(subiso_results()$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size", target = subiso_results()$target_coverage) })
+  output$subiso_richness_by_n <- renderPlotly({ req(subiso_results()); plot_sample_size_curve_plotly(subiso_results()$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size", target = subiso_results()$target_richness) })
 
   output$download_csv <- downloadHandler(
     filename = function() paste0("nagy2026_isolate_summary_", Sys.Date(), ".csv"),
@@ -1421,8 +1537,8 @@ server <- function(input, output, session) {
       print(plot_richness_curve(r$richness_curve, "Posterior feature richness above threshold"))
       print(plot_required_hist(r$required$coverage, "Required sample size: target coverage"))
       print(plot_required_hist(r$required$richness, "Required sample size: target richness"))
-      print(plot_sample_size_curve_gg(r$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size"))
-      print(plot_sample_size_curve_gg(r$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size"))
+      print(plot_sample_size_curve_gg(r$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size", target = r$target_coverage))
+      print(plot_sample_size_curve_gg(r$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size", target = r$target_richness))
     }
   )
 
@@ -1438,8 +1554,8 @@ server <- function(input, output, session) {
       print(plot_richness_curve(r$richness_curve, "Posterior feature richness above threshold"))
       print(plot_required_hist(r$required$coverage, "Required sample size: target coverage"))
       print(plot_required_hist(r$required$richness, "Required sample size: target richness"))
-      print(plot_sample_size_curve_gg(r$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size"))
-      print(plot_sample_size_curve_gg(r$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size"))
+      print(plot_sample_size_curve_gg(r$mass_curve, "median_mass", "q2.5", "q97.5", "Coverage", "Posterior sample coverage by sample size", target = r$target_coverage))
+      print(plot_sample_size_curve_gg(r$richness_curve, "median_species_proportion", "q2.5_species_proportion", "q97.5_species_proportion", "Richness", "Posterior feature richness by sample size", target = r$target_richness))
     }
   )
 }
