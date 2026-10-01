@@ -668,7 +668,10 @@ plot_required_hist <- function(x, title) {
 
 plotly_from_gg <- function(p) {
   plotly::ggplotly(p, tooltip = "text") |>
-    plotly::layout(legend = list(orientation = "h", x = 0.1, y = -0.1))
+    plotly::layout(
+      margin = list(t = 75, b = 70, l = 75, r = 25),
+      legend = list(orientation = "h", x = 0.1, y = -0.1)
+    )
 }
 
 # Explicit Plotly traces for the threshold curves. Using direct Plotly here avoids
@@ -701,7 +704,8 @@ plot_frequency_curve_plotly <- function(curve, value_col, lo_col, hi_col,
       showlegend = FALSE
     ) |>
     plotly::layout(
-      title = list(text = paste0("<b>", title, "</b>"), x = 0.5),
+      title = list(text = paste0("<b>", title, "</b>"), x = 0.5, y = 0.97),
+      margin = list(t = 80, b = 70, l = 75, r = 25),
       xaxis = list(title = "Frequency", type = "log"),
       yaxis = list(title = y_title, range = c(0, 1)),
       hovermode = "x unified"
@@ -749,7 +753,8 @@ plot_sample_size_curve_plotly <- function(curve, value_col, lo_col, hi_col,
       showlegend = FALSE
     ) |>
     plotly::layout(
-      title = list(text = paste0("<b>", title, "</b>"), x = 0.5),
+      title = list(text = paste0("<b>", title, "</b>"), x = 0.5, y = 0.97),
+      margin = list(t = 80, b = 70, l = 75, r = 25),
       xaxis = list(
         title = "Sample size",
         type = "log",
@@ -810,12 +815,12 @@ ui <- fluidPage(
       .docs-box ol { padding-left:22px; }\
       .docs-box li { margin-bottom:9px; }\
       .field-help { color:#888; font-size:.82em; line-height:1.3; margin-top:-4px; margin-bottom:5px; font-weight:normal; }\
-      .plot-panel { padding:12px 14px 16px 14px; border-radius:8px; border:1px solid #dde3e8; margin-top:12px; margin-bottom:16px; }\
+      .plot-panel { padding:16px 14px 28px 14px; border-radius:8px; border:1px solid #dde3e8; margin-top:12px; margin-bottom:16px; }\
       .coverage-panel { background:#f3f8fc; }\
       .richness-panel { background:#fbf7f1; }\
       .plot-panel h3 { margin-top:4px; margin-bottom:2px; font-size:1.25em; font-weight:600; }\
-      .panel-intro { color:#666; font-size:.88em; line-height:1.35; margin-bottom:8px; }\
-      .plot-help { color:#777; font-size:.82em; line-height:1.35; margin:-4px 6px 14px 6px; }\
+      .panel-intro { color:#666; font-size:.88em; line-height:1.35; margin-bottom:12px; min-height:58px; }\
+      .plot-help { color:#777; font-size:.82em; line-height:1.35; margin:4px 6px 22px 6px; }\
       .plot-separator { border-top:1px solid rgba(0,0,0,.08); margin:8px 0 10px 0; }\
       @keyframes spin { to { transform:rotate(360deg); } }\
     "))
@@ -826,21 +831,26 @@ ui <- fluidPage(
 
   div(class = "docs-box",
       tags$h4("Why use this tool?"),
-      tags$p(
+      tags$p(HTML(paste0(
         "You could use a conventional power calculation (for example, ",
-        tags$a("ClinCalc Sample Size Calculator", href = "https://clincalc.com/stats/samplesize.aspx", target = "_blank"),
-        "), but this requires you to select a minimum frequency threshold for a feature you want to detect and generally considers a single feature at a time. ",
-        "The EpiSENTRY method considers multiple genomic features simultaneously, which is useful for complex whole-genome sequencing data. It also accounts for unseen features and relates sample size to coverage: the proportion of the population represented by features detected at least once in the sample."
-      ),
+        "<a href='https://clincalc.com/stats/samplesize.aspx' target='_blank'>ClinCalc Sample Size Calculator</a>), ",
+        "however this requires you to select a minimum frequency threshold for a feature you want to detect and generally considers a single feature at a time. ",
+        "The EpiSENTRY method considers multiple genomic features simultaneously, which is useful for complex whole-genome sequencing data. ",
+        "It also accounts for unseen features and relates sample size to a diversity metric called coverage ",
+        "(the proportion of the population represented by features detected at least once in the sample)."
+      ))),
       tags$h4("How to use this tool"),
       tags$ol(
         tags$li(tags$strong("Select the appropriate feature tab. "),
-                "Choose Isolate-level features when each isolate or sampling unit can have only one feature label, such as MLST, cgMLST or another lineage label. Choose Sub-isolate-level features when an isolate or sampling unit can carry any number of features, such as genes or plasmids."),
+                HTML("Choose <strong>&quot;Isolate-level features&quot;</strong> when each isolate or sampling unit can have only one feature label, such as MLST, cgMLST or another lineage label. Choose <strong>&quot;Sub-isolate-level features&quot;</strong> when an isolate or sampling unit can carry any number of features, such as genes or plasmids.")),
         tags$li(tags$strong("Provide input data from an initial genomic survey. "),
-                "Use data from your population of interest, or from a sufficiently similar population. Select whether to upload a CSV or paste comma-separated CSV text. For uploads, download the relevant template, complete it, and upload the resulting CSV. Example data for E. coli and Klebsiella from a high-income healthcare setting are available in the ",
-                tags$a("associated GitHub repository", href = "https://github.com/oxfordmmm/How_much_is_enough_for_genomic_surveillance_of_BSIs/tree/main/RShiny", target = "_blank"),
-                ". See the README for detailed CSV requirements."),
-        tags$li(tags$strong("Select the column names and parameter values. "),
+                HTML(paste0(
+                  "Use data from your population of interest, or from a sufficiently similar population. Select whether to upload a CSV or paste comma-separated CSV text. ",
+                  "For uploads, download the relevant template, complete it, and upload the resulting CSV. Example data for <em>E. coli</em> and <em>Klebsiella</em> from a high-income healthcare setting are available in the ",
+                  "<a href='https://github.com/oxfordmmm/How_much_is_enough_for_genomic_surveillance_of_BSIs/tree/main/RShiny' target='_blank'>associated GitHub repository</a>. ",
+                  "See the README for detailed CSV requirements."
+                ))),
+        tags$li(tags$strong("Verify the column names and parameter values and adjust as needed. "),
                 "A short description is provided below each relevant field."),
         tags$li(tags$strong("Press Run analysis. "),
                 "Please be patient: the analysis may take a few minutes, particularly for large datasets or when using many posterior draws."),
@@ -871,15 +881,25 @@ ui <- fluidPage(
                     label = tagList("Count column", div(class = "field-help", "Name of the CSV column containing the number of isolates observed for each feature label. Values must be numeric and non-negative.")),
                     value = "count"),
           tags$hr(),
-          numericInput("alpha_prior", "alpha prior", value = 1, min = 0, step = 0.1),
-          div(class = "param-help",
-              "A common prior is applied to every observed and novel feature. Novel prior mass is estimated from the CRP and then rounded upward before deriving the number of novel features."),
-          numericInput("B", "Posterior draws", value = 2000, min = 100, step = 100),
-          numericInput("seed", "Seed", value = 2026, step = 1),
+          numericInput("alpha_prior",
+                       label = tagList("alpha prior", div(class = "field-help", "A common prior pseudo-count applied to every observed and novel feature. The number of novel features is estimated from the Chinese restaurant process-derived novel mass and rounded upward; total novel prior mass is then the number of novel features × alpha prior.")),
+                       value = 1, min = 0, step = 0.1),
+          numericInput("B",
+                       label = tagList("Posterior draws", div(class = "field-help", "The number of draws taken from the Bayesian posterior distribution. Higher numbers will make the analysis take longer.")),
+                       value = 1000, min = 100, step = 100),
+          numericInput("seed",
+                       label = tagList("Seed", div(class = "field-help", "Set the random seed to make analyses reproducible.")),
+                       value = 2026, step = 1),
           tags$hr(),
-          numericInput("target_coverage", "Target sample coverage", value = 0.80, min = 0.001, max = 0.999, step = 0.01),
-          numericInput("target_richness", "Target feature richness", value = 0.80, min = 0.001, max = 0.999, step = 0.01),
-          numericInput("confidence_level", "Detection confidence", value = 0.95, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("target_coverage",
+                       label = tagList("Target sample coverage", div(class = "field-help", "What is the minimum proportion of individuals in the population that should be represented by the features detected at least once in the sample?")),
+                       value = 0.80, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("target_richness",
+                       label = tagList("Target feature richness", div(class = "field-help", "What is the minimum proportion of unique features that should be detected in your sample? The denominator of unique features incorporates both the observed and predicted novel features.")),
+                       value = 0.80, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("confidence_level",
+                       label = tagList("Detection confidence", div(class = "field-help", "How confident do you want to be of detecting each feature?")),
+                       value = 0.95, min = 0.001, max = 0.999, step = 0.01),
           actionButton("run", "Run analysis", class = "btn-primary"),
           tags$hr(),
           downloadButton("download_csv", "Download summary CSV"),
@@ -944,15 +964,25 @@ ui <- fluidPage(
           downloadButton("download_template_sub", "Download sub-isolate template CSV"),
           uiOutput("subiso_detected_ui"),
           tags$hr(),
-          numericInput("beta_prior", "beta prior", value = 1, min = 0, step = 0.1),
-          div(class = "param-help",
-              "A common beta prior is applied to every observed and novel feature. The number of novel features is estimated from the supplied presence/absence data and the resulting novel prior mass is beta_novel_num × beta_prior."),
-          numericInput("B_sub", "Posterior draws", value = 2000, min = 100, step = 100),
-          numericInput("seed_sub", "Seed", value = 2026, step = 1),
+          numericInput("beta_prior",
+                       label = tagList("beta prior", div(class = "field-help", "A common prior pseudo-count applied to every observed and novel feature. The number of novel features is estimated from the supplied presence/absence data using the Good-Turing estimator, and total novel prior mass is the number of novel features × beta prior.")),
+                       value = 1, min = 0, step = 0.1),
+          numericInput("B_sub",
+                       label = tagList("Posterior draws", div(class = "field-help", "The number of draws taken from the Bayesian posterior distribution. Higher numbers will make the analysis take longer.")),
+                       value = 1000, min = 100, step = 100),
+          numericInput("seed_sub",
+                       label = tagList("Seed", div(class = "field-help", "Set the random seed to make analyses reproducible.")),
+                       value = 2026, step = 1),
           tags$hr(),
-          numericInput("target_coverage_sub", "Target sample coverage", value = 0.80, min = 0.001, max = 0.999, step = 0.01),
-          numericInput("target_richness_sub", "Target feature richness", value = 0.80, min = 0.001, max = 0.999, step = 0.01),
-          numericInput("confidence_level_sub", "Detection confidence", value = 0.95, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("target_coverage_sub",
+                       label = tagList("Target sample coverage", div(class = "field-help", "What is the minimum proportion of individuals in the population that should be represented by the features detected at least once in the sample?")),
+                       value = 0.80, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("target_richness_sub",
+                       label = tagList("Target feature richness", div(class = "field-help", "What is the minimum proportion of unique features that should be detected in your sample? The denominator of unique features incorporates both the observed and predicted novel features.")),
+                       value = 0.80, min = 0.001, max = 0.999, step = 0.01),
+          numericInput("confidence_level_sub",
+                       label = tagList("Detection confidence", div(class = "field-help", "How confident do you want to be of detecting each feature?")),
+                       value = 0.95, min = 0.001, max = 0.999, step = 0.01),
           actionButton("run_sub", "Run analysis", class = "btn-primary"),
           tags$hr(),
           downloadButton("download_csv_sub", "Download summary CSV"),
@@ -1245,9 +1275,9 @@ server <- function(input, output, session) {
         "<p><strong>Number of novel features:</strong> ", r$alpha_novel_num, "</p>",
         "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid_99)), "&ndash;", format_n(max(sample_size_grid_99)), "</p>",
         "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
-        " (95% interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
+        " (95% credible interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
         "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
-        " (95% interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>"
+        " (95% credible interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>"
       ))
     )
   })
@@ -1268,9 +1298,9 @@ server <- function(input, output, session) {
         "<p><strong>Number of novel features:</strong> ", r$beta_novel_num, "</p>",
         "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid_99)), "&ndash;", format_n(max(sample_size_grid_99)), "</p>",
         "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
-        " (95% interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
+        " (95% credible interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
         "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
-        " (95% interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>"
+        " (95% credible interval ", format_n(r$required$richness_summary["q2.5"]), "-", format_n(r$required$richness_summary["q97.5"]), ")</p>"
       ))
     )
   })
