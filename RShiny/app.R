@@ -267,19 +267,29 @@ prep_bootstrap_draws <- function(draws) {
   list(x_sorted = x_sorted, cumsums = cs, totals = rowSums(x_sorted))
 }
 
-sample_size_grid_99 <- c(
+sample_size_grid <- c(
   seq(0, 10000, by = 1),
   seq(10005, 50000, by = 5),
   seq(50010, 100000, by = 10)
 )
 
-default_f_grid <- function() {
-  1 - ((1 - 0.99)^(1 / sample_size_grid_99))
+frequency_grid_for_confidence <- function(confidence = 0.99) {
+  validate_prob(confidence, "Detection confidence")
+  1 - ((1 - confidence)^(1 / sample_size_grid))
 }
 
+default_f_grid <- function() frequency_grid_for_confidence(0.99)
 f_grid_99 <- default_f_grid()
 
-compute_species_richness_curve <- function(prep, f_grid = NULL) {
+sample_size_from_frequency <- function(f, confidence = 0.99) {
+  out <- rep(NA_real_, length(f))
+  ok <- is.finite(f) & f > 0 & f < 1
+  out[ok] <- log(1 - confidence) / log(1 - f[ok])
+  out[is.finite(f) & f >= 1] <- 0
+  round(out)
+}
+
+compute_species_richness_curve <- function(prep, f_grid = NULL, confidence = 0.99) {
   x_sorted <- prep$x_sorted
   B <- nrow(x_sorted)
   K <- ncol(x_sorted)
@@ -300,7 +310,7 @@ compute_species_richness_curve <- function(prep, f_grid = NULL) {
 
   out <- data.frame(
     f = f_grid,
-    sample_size = sample_size_grid_99[match(f_grid, f_grid_99)],
+    sample_size = sample_size_from_frequency(f_grid, confidence),
     median_species_count = matrixStats::colMedians(counts),
     sd_species_count = matrixStats::colSds(counts),
     q2.5 = q_counts[, 1],
@@ -313,7 +323,7 @@ compute_species_richness_curve <- function(prep, f_grid = NULL) {
   out
 }
 
-compute_mass_curve <- function(prep, f_grid = NULL) {
+compute_mass_curve <- function(prep, f_grid = NULL, confidence = 0.99) {
   x_sorted <- prep$x_sorted
   cs <- prep$cumsums
   totals <- prep$totals
@@ -332,7 +342,7 @@ compute_mass_curve <- function(prep, f_grid = NULL) {
   q <- matrixStats::colQuantiles(masses, probs = c(0.025, 0.975))
   out <- data.frame(
     f = f_grid,
-    sample_size = sample_size_grid_99[match(f_grid, f_grid_99)],
+    sample_size = sample_size_from_frequency(f_grid, confidence),
     median_mass = matrixStats::colMedians(masses),
     sd_mass = matrixStats::colSds(masses),
     q2.5 = q[, 1],
@@ -464,7 +474,7 @@ prep_subiso_curve <- function(df) {
   )
 }
 
-compute_species_richness_subiso <- function(x, f_grid = NULL) {
+compute_species_richness_subiso <- function(x, f_grid = NULL, confidence = 0.99) {
   p_mat <- get_p_matrix(x)
   B <- nrow(p_mat)
   K <- ncol(p_mat)
@@ -485,7 +495,7 @@ compute_species_richness_subiso <- function(x, f_grid = NULL) {
 
   out <- tibble::tibble(
     f = f_grid,
-    sample_size = sample_size_grid_99[match(f_grid, f_grid_99)],
+    sample_size = sample_size_from_frequency(f_grid, confidence),
     median_species_count = matrixStats::colMedians(rich_mat, na.rm = TRUE),
     q2.5_species_count = q_count[, 1],
     q97.5_species_count = q_count[, 2],
@@ -497,7 +507,7 @@ compute_species_richness_subiso <- function(x, f_grid = NULL) {
   out
 }
 
-compute_mass_curve_subiso <- function(x, f_grid = NULL) {
+compute_mass_curve_subiso <- function(x, f_grid = NULL, confidence = 0.99) {
   p_mat <- get_p_matrix(x)
   B <- nrow(p_mat)
   if (is.null(f_grid)) f_grid <- default_subiso_f_grid()
@@ -519,7 +529,7 @@ compute_mass_curve_subiso <- function(x, f_grid = NULL) {
   q_mass <- matrixStats::colQuantiles(mass_mat, probs = c(0.025, 0.975), na.rm = TRUE)
   out <- tibble::tibble(
     f = f_grid,
-    sample_size = sample_size_grid_99[match(f_grid, f_grid_99)],
+    sample_size = sample_size_from_frequency(f_grid, confidence),
     median_mass = matrixStats::colMedians(mass_mat, na.rm = TRUE),
     q2.5 = q_mass[, 1],
     q97.5 = q_mass[, 2]
@@ -576,11 +586,56 @@ required_n_from_draw <- function(p, target, mode = c("coverage", "richness"), co
   ceiling(n_star)
 }
 
+# For sub-isolate features, p contains marginal per-isolate feature prevalences.
+# These must NOT be normalised to sum to one before converting prevalence to
+# an isolate sample size, because multiple features can coexist in one isolate.
+required_n_from_draw_subiso <- function(p, target, mode = c("coverage", "richness"), confidence = 0.95) {
+  mode <- match.arg(mode)
+  p <- p[is.finite(p) & p >= 0 & p <= 1]
+  if (length(p) == 0) return(NA_real_)
+  p <- sort(p, decreasing = TRUE)
+  total <- sum(p)
+  if (!is.finite(total) || total <= 0) return(NA_real_)
+
+  cum <- if (mode == "coverage") cumsum(p) / total else seq_along(p) / length(p)
+  idx <- which(cum >= target)[1]
+  if (is.na(idx)) return(NA_real_)
+
+  # f_star is the marginal prevalence of the limiting feature in isolates.
+  f_star <- p[idx]
+  if (!is.finite(f_star) || f_star <= 0) return(NA_real_)
+  if (f_star >= 1) return(1)
+  ceiling(log(1 - confidence) / log(1 - f_star))
+}
+
 summarise_required_n <- function(draws, target_coverage, target_richness, confidence) {
   p_mat <- as.matrix(draws)
   cov_n <- apply(p_mat, 1, required_n_from_draw,
                  target = target_coverage, mode = "coverage", confidence = confidence)
   rich_n <- apply(p_mat, 1, required_n_from_draw,
+                  target = target_richness, mode = "richness", confidence = confidence)
+  list(
+    coverage = cov_n,
+    richness = rich_n,
+    coverage_summary = c(
+      median = median(cov_n, na.rm = TRUE),
+      q2.5 = quantile(cov_n, 0.025, na.rm = TRUE, names = FALSE),
+      q97.5 = quantile(cov_n, 0.975, na.rm = TRUE, names = FALSE)
+    ),
+    richness_summary = c(
+      median = median(rich_n, na.rm = TRUE),
+      q2.5 = quantile(rich_n, 0.025, na.rm = TRUE, names = FALSE),
+      q97.5 = quantile(rich_n, 0.975, na.rm = TRUE, names = FALSE)
+    )
+  )
+}
+
+
+summarise_required_n_subiso <- function(draws, target_coverage, target_richness, confidence) {
+  p_mat <- as.matrix(draws)
+  cov_n <- apply(p_mat, 1, required_n_from_draw_subiso,
+                 target = target_coverage, mode = "coverage", confidence = confidence)
+  rich_n <- apply(p_mat, 1, required_n_from_draw_subiso,
                   target = target_richness, mode = "richness", confidence = confidence)
   list(
     coverage = cov_n,
@@ -899,7 +954,7 @@ ui <- fluidPage(
                        value = 0.80, min = 0.001, max = 0.999, step = 0.01),
           numericInput("confidence_level",
                        label = tagList("Detection confidence", div(class = "field-help", "How confident do you want to be of detecting each feature?")),
-                       value = 0.95, min = 0.001, max = 0.999, step = 0.01),
+                       value = 0.99, min = 0.001, max = 0.999, step = 0.01),
           actionButton("run", "Run analysis", class = "btn-primary"),
           tags$hr(),
           downloadButton("download_csv", "Download summary CSV"),
@@ -982,7 +1037,7 @@ ui <- fluidPage(
                        value = 0.80, min = 0.001, max = 0.999, step = 0.01),
           numericInput("confidence_level_sub",
                        label = tagList("Detection confidence", div(class = "field-help", "How confident do you want to be of detecting each feature?")),
-                       value = 0.95, min = 0.001, max = 0.999, step = 0.01),
+                       value = 0.99, min = 0.001, max = 0.999, step = 0.01),
           actionButton("run_sub", "Run analysis", class = "btn-primary"),
           tags$hr(),
           downloadButton("download_csv_sub", "Download summary CSV"),
@@ -1150,8 +1205,9 @@ server <- function(input, output, session) {
 
       shiny::incProgress(0.25, detail = "Calculating sampling curves")
       prep <- prep_bootstrap_draws(fit$draws)
-      mass_curve <- compute_mass_curve(prep, f_grid = f_grid_99)
-      richness_curve <- compute_species_richness_curve(prep, f_grid = f_grid_99)
+      f_grid_run <- frequency_grid_for_confidence(confidence)
+      mass_curve <- compute_mass_curve(prep, f_grid = f_grid_run, confidence = confidence)
+      richness_curve <- compute_species_richness_curve(prep, f_grid = f_grid_run, confidence = confidence)
       req <- summarise_required_n(fit$draws, target_coverage, target_richness, confidence)
 
       shiny::incProgress(0.20, detail = "Finalising results")
@@ -1231,9 +1287,10 @@ server <- function(input, output, session) {
       )
 
       shiny::incProgress(0.25, detail = "Calculating sampling curves")
-      mass_curve <- compute_mass_curve_subiso(p_mat, f_grid = f_grid_99)
-      richness_curve <- compute_species_richness_subiso(p_mat, f_grid = f_grid_99)
-      req <- summarise_required_n(p_mat, target_coverage, target_richness, confidence)
+      f_grid_run <- frequency_grid_for_confidence(confidence)
+      mass_curve <- compute_mass_curve_subiso(p_mat, f_grid = f_grid_run, confidence = confidence)
+      richness_curve <- compute_species_richness_subiso(p_mat, f_grid = f_grid_run, confidence = confidence)
+      req <- summarise_required_n_subiso(p_mat, target_coverage, target_richness, confidence)
 
       shiny::incProgress(0.20, detail = "Finalising results")
       subiso_results(list(
@@ -1273,7 +1330,7 @@ server <- function(input, output, session) {
         "<p class='summary-help'>Prior pseudo-count of features.</p>",
         "<p><strong>Prior mass of novel features:</strong> ", signif(r$alpha_novel_sum, 5), "</p>",
         "<p><strong>Number of novel features:</strong> ", r$alpha_novel_num, "</p>",
-        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid_99)), "&ndash;", format_n(max(sample_size_grid_99)), "</p>",
+        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid)), "&ndash;", format_n(max(sample_size_grid)), "</p>",
         "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
         " (95% credible interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
         "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
@@ -1296,7 +1353,7 @@ server <- function(input, output, session) {
         "<p class='summary-help'>Estimated using the Good-Turing estimator.</p>",
         "<p><strong>Prior mass of novel features:</strong> ", signif(r$beta_novel_sum, 5), "</p>",
         "<p><strong>Number of novel features:</strong> ", r$beta_novel_num, "</p>",
-        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid_99)), "&ndash;", format_n(max(sample_size_grid_99)), "</p>",
+        "<p><strong>Sample sizes explored:</strong> ", format_n(min(sample_size_grid)), "&ndash;", format_n(max(sample_size_grid)), "</p>",
         "<p class='sample-size-result'><strong>Coverage sample size:</strong> ", format_n(r$required$coverage_summary["median"]),
         " (95% credible interval ", format_n(r$required$coverage_summary["q2.5"]), "-", format_n(r$required$coverage_summary["q97.5"]), ")</p>",
         "<p class='sample-size-result'><strong>Richness sample size:</strong> ", format_n(r$required$richness_summary["median"]),
