@@ -805,12 +805,49 @@ ui <- fluidPage(
       .detected-box { padding:8px 10px; background:#f7fafc; border:1px solid #dce6ef; border-radius:6px; margin-top:6px; margin-bottom:10px; }\
       .analysis-status { display:flex; align-items:center; gap:9px; padding:8px 10px; margin-bottom:10px; background:#f7f7f7; border:1px solid #e5e5e5; border-radius:6px; }\
       .analysis-spinner { width:16px; height:16px; border:2px solid #d9d9d9; border-top-color:#337ab7; border-radius:50%; animation:spin 0.8s linear infinite; flex:0 0 auto; }\
+      .docs-box { padding:14px 18px; margin:8px 0 18px 0; background:#fafafa; border:1px solid #e5e5e5; border-radius:7px; line-height:1.5; }\
+      .docs-box h4 { margin-top:6px; font-weight:600; }\
+      .docs-box ol { padding-left:22px; }\
+      .docs-box li { margin-bottom:9px; }\
+      .field-help { color:#888; font-size:.82em; line-height:1.3; margin-top:-4px; margin-bottom:5px; font-weight:normal; }\
+      .plot-panel { padding:12px 14px 16px 14px; border-radius:8px; border:1px solid #dde3e8; margin-top:12px; margin-bottom:16px; }\
+      .coverage-panel { background:#f3f8fc; }\
+      .richness-panel { background:#fbf7f1; }\
+      .plot-panel h3 { margin-top:4px; margin-bottom:2px; font-size:1.25em; font-weight:600; }\
+      .panel-intro { color:#666; font-size:.88em; line-height:1.35; margin-bottom:8px; }\
+      .plot-help { color:#777; font-size:.82em; line-height:1.35; margin:-4px 6px 14px 6px; }\
+      .plot-separator { border-top:1px solid rgba(0,0,0,.08); margin:8px 0 10px 0; }\
       @keyframes spin { to { transform:rotate(360deg); } }\
     "))
   ),
-  titlePanel("EpiSENTRY - Epidemiological Sampling frame Estimation for geNomic surveillance of microbial diversiTY"),
+  titlePanel("How much is enough? Genomic surveillance sampling-frame estimator for bacterial pathogens"),
   div(class = "app-intro",
-      "Bayesian analysis of isolate-level and sub-isolate-level genomic features to estimate genomic surveillance sample sizes for bacterial pathogens."),
+      "This tool estimates the sample size required to capture a given proportion of population genomic diversity, using Bayesian analysis of user-provided survey/sample data."),
+
+  div(class = "docs-box",
+      tags$h4("Why use this tool?"),
+      tags$p(
+        "You could use a conventional power calculation (for example, ",
+        tags$a("ClinCalc Sample Size Calculator", href = "https://clincalc.com/stats/samplesize.aspx", target = "_blank"),
+        "), but this requires you to select a minimum frequency threshold for a feature you want to detect and generally considers a single feature at a time. ",
+        "The EpiSENTRY method considers multiple genomic features simultaneously, which is useful for complex whole-genome sequencing data. It also accounts for unseen features and relates sample size to coverage: the proportion of the population represented by features detected at least once in the sample."
+      ),
+      tags$h4("How to use this tool"),
+      tags$ol(
+        tags$li(tags$strong("Select the appropriate feature tab. "),
+                "Choose Isolate-level features when each isolate or sampling unit can have only one feature label, such as MLST, cgMLST or another lineage label. Choose Sub-isolate-level features when an isolate or sampling unit can carry any number of features, such as genes or plasmids."),
+        tags$li(tags$strong("Provide input data from an initial genomic survey. "),
+                "Use data from your population of interest, or from a sufficiently similar population. Select whether to upload a CSV or paste comma-separated CSV text. For uploads, download the relevant template, complete it, and upload the resulting CSV. Example data for E. coli and Klebsiella from a high-income healthcare setting are available in the ",
+                tags$a("associated GitHub repository", href = "https://github.com/oxfordmmm/How_much_is_enough_for_genomic_surveillance_of_BSIs/tree/main/RShiny", target = "_blank"),
+                ". See the README for detailed CSV requirements."),
+        tags$li(tags$strong("Select the column names and parameter values. "),
+                "A short description is provided below each relevant field."),
+        tags$li(tags$strong("Press Run analysis. "),
+                "Please be patient: the analysis may take a few minutes, particularly for large datasets or when using many posterior draws."),
+        tags$li(tags$strong("Download results if required. "),
+                "You can save the numerical results as a CSV and the output plots as a PDF.")
+      )
+  ),
 
   tabsetPanel(
     id = "feature_tabs",
@@ -827,8 +864,12 @@ ui <- fluidPage(
           textAreaInput("csv_text", "Paste CSV",
                         placeholder = "mlst_profile,count\nA01,10\nA02,6\nA03,1", rows = 8),
           downloadButton("download_template_isolate", "Download isolate template CSV"),
-          textInput("feature_col", "Feature column", value = "mlst_profile"),
-          textInput("count_col", "Count column", value = "count"),
+          textInput("feature_col",
+                    label = tagList("Feature column", div(class = "field-help", "Name of the CSV column containing the mutually exclusive genomic feature labels. Default: mlst_profile.")),
+                    value = "mlst_profile"),
+          textInput("count_col",
+                    label = tagList("Count column", div(class = "field-help", "Name of the CSV column containing the number of isolates observed for each feature label. Values must be numeric and non-negative.")),
+                    value = "count"),
           tags$hr(),
           numericInput("alpha_prior", "alpha prior", value = 1, min = 0, step = 0.1),
           div(class = "param-help",
@@ -848,19 +889,40 @@ ui <- fluidPage(
           uiOutput("isolate_status"),
           fluidRow(
             column(5, htmlOutput("isolate_summary")),
-            column(7, plotlyOutput("isolate_obs_pred", height = 420))
+            column(7,
+                   plotlyOutput("isolate_obs_pred", height = 420),
+                   div(class = "plot-help",
+                       "Observed feature prevalence is compared with the posterior median prevalence and 95% credible interval. Points close to the diagonal indicate close agreement between the observed and posterior estimates."))
           ),
           fluidRow(
-            column(6, plotlyOutput("isolate_mass", height = 360)),
-            column(6, plotlyOutput("isolate_richness", height = 360))
-          ),
-          fluidRow(
-            column(6, plotlyOutput("isolate_cov_req", height = 320)),
-            column(6, plotlyOutput("isolate_rich_req", height = 320))
-          ),
-          fluidRow(
-            column(6, plotlyOutput("isolate_coverage_by_n", height = 360)),
-            column(6, plotlyOutput("isolate_richness_by_n", height = 360))
+            column(6,
+              div(class = "plot-panel coverage-panel",
+                  tags$h3("Coverage"),
+                  div(class = "panel-intro", "Coverage is the proportion of the population represented by features detected at least once in the sample."),
+                  plotlyOutput("isolate_coverage_by_n", height = 360),
+                  div(class = "plot-help", "Shows how estimated population coverage increases with sample size. Use this plot to see the sample size associated with a desired population coverage."),
+                  div(class = "plot-separator"),
+                  plotlyOutput("isolate_mass", height = 360),
+                  div(class = "plot-help", "Shows the posterior population mass contributed by features whose frequency is above each frequency threshold. Lower thresholds include progressively rarer features."),
+                  div(class = "plot-separator"),
+                  plotlyOutput("isolate_cov_req", height = 320),
+                  div(class = "plot-help", "Shows uncertainty in the sample size required to reach the selected target coverage across posterior draws.")
+              )
+            ),
+            column(6,
+              div(class = "plot-panel richness-panel",
+                  tags$h3("Feature richness"),
+                  div(class = "panel-intro", "Richness is the proportion of modelled unique feature categories expected to be detected. In this implementation, the modelled total includes both observed feature categories and the predicted novel feature categories."),
+                  plotlyOutput("isolate_richness_by_n", height = 360),
+                  div(class = "plot-help", "Shows how the proportion of modelled unique feature categories expected to be detected increases with sample size. The denominator includes the predicted novel feature categories as well as those observed in the input data."),
+                  div(class = "plot-separator"),
+                  plotlyOutput("isolate_richness", height = 360),
+                  div(class = "plot-help", "Shows the proportion of modelled feature categories with frequency above each threshold. This includes predicted novel feature categories in the modelled feature total."),
+                  div(class = "plot-separator"),
+                  plotlyOutput("isolate_rich_req", height = 320),
+                  div(class = "plot-help", "Shows uncertainty in the sample size required to reach the selected target feature richness across posterior draws.")
+              )
+            )
           ),
           tags$hr(),
           div(class = "app-intro", HTML(paste0("<strong>Citation:</strong> ", citation_text)))
@@ -900,19 +962,40 @@ ui <- fluidPage(
           uiOutput("subiso_status"),
           fluidRow(
             column(5, htmlOutput("subiso_summary")),
-            column(7, plotlyOutput("subiso_obs_pred", height = 420))
+            column(7,
+                   plotlyOutput("subiso_obs_pred", height = 420),
+                   div(class = "plot-help",
+                       "Observed feature prevalence is compared with the posterior median prevalence and 95% credible interval. Points close to the diagonal indicate close agreement between the observed and posterior estimates."))
           ),
           fluidRow(
-            column(6, plotlyOutput("subiso_mass", height = 360)),
-            column(6, plotlyOutput("subiso_richness", height = 360))
-          ),
-          fluidRow(
-            column(6, plotlyOutput("subiso_cov_req", height = 320)),
-            column(6, plotlyOutput("subiso_rich_req", height = 320))
-          ),
-          fluidRow(
-            column(6, plotlyOutput("subiso_coverage_by_n", height = 360)),
-            column(6, plotlyOutput("subiso_richness_by_n", height = 360))
+            column(6,
+              div(class = "plot-panel coverage-panel",
+                  tags$h3("Coverage"),
+                  div(class = "panel-intro", "Coverage is the proportion of the population represented by features detected at least once in the sample."),
+                  plotlyOutput("subiso_coverage_by_n", height = 360),
+                  div(class = "plot-help", "Shows how estimated population coverage increases with sample size. Use this plot to see the sample size associated with a desired population coverage."),
+                  div(class = "plot-separator"),
+                  plotlyOutput("subiso_mass", height = 360),
+                  div(class = "plot-help", "Shows the posterior population mass contributed by features whose prevalence is above each frequency threshold. Lower thresholds include progressively rarer features."),
+                  div(class = "plot-separator"),
+                  plotlyOutput("subiso_cov_req", height = 320),
+                  div(class = "plot-help", "Shows uncertainty in the sample size required to reach the selected target coverage across posterior draws.")
+              )
+            ),
+            column(6,
+              div(class = "plot-panel richness-panel",
+                  tags$h3("Feature richness"),
+                  div(class = "panel-intro", "Richness is the proportion of modelled unique feature categories expected to be detected. In this implementation, the modelled total includes both observed gene/feature columns and the predicted novel feature categories."),
+                  plotlyOutput("subiso_richness_by_n", height = 360),
+                  div(class = "plot-help", "Shows how the proportion of modelled unique features expected to be detected increases with sample size. The denominator includes predicted novel features as well as the feature columns observed in the input data."),
+                  div(class = "plot-separator"),
+                  plotlyOutput("subiso_richness", height = 360),
+                  div(class = "plot-help", "Shows the proportion of modelled feature categories with prevalence above each threshold. This includes predicted novel features in the modelled feature total."),
+                  div(class = "plot-separator"),
+                  plotlyOutput("subiso_rich_req", height = 320),
+                  div(class = "plot-help", "Shows uncertainty in the sample size required to reach the selected target feature richness across posterior draws.")
+              )
+            )
           ),
           tags$hr(),
           div(class = "app-intro", HTML(paste0("<strong>Citation:</strong> ", citation_text)))
