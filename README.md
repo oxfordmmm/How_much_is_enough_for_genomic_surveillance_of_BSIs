@@ -4,7 +4,7 @@ EpiSENTRY is an R Shiny application for estimating the sample size required to c
 
 The application accompanies:
 
-**Nagy et al., 2026. _How much is enough? Optimising sampling frames for genomic surveillance of Escherichia coli and Klebsiella spp. bloodstream infections – a retrospective study._**
+[**Nagy et al., 2026. _How much is enough? Optimising sampling frames for genomic surveillance of Escherichia coli and Klebsiella spp. bloodstream infections – a retrospective study. medRxiv_**](https://www.medrxiv.org/content/10.64898/2026.09.28.26364154v1)
 
 ## Why use this tool?
 
